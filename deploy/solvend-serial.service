@@ -1,0 +1,38 @@
+[Unit]
+Description=SolVend keypad serial bridge (ESP32 <-> ledger)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=pi
+Group=dialout
+# NOTE: `pi` = your normal login user. There is no `zeroclaw` system user —
+# ZeroClaw itself runs as YOU under `systemctl --user`. Change this line if your
+# username is not `pi`. dialout is what grants /dev/ttyUSB0:
+#   sudo usermod -aG dialout $USER   (then log out and back in)
+EnvironmentFile=/etc/solvend/env
+ExecStart=/usr/bin/python3 /opt/solvend/solvend-serial.py
+Restart=always
+RestartSec=3
+
+# The daemon reads four digits and writes one command. Give it nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/solvend
+# systemd does NOT accept trailing comments on a directive line — it parses the
+# comment as part of the value, fails, and IGNORES the directive while the unit
+# still starts "successfully". Observed 2026-08-06: `PrivateNetwork=true  # ...`
+# was silently dropped, leaving the daemon with the network access this line
+# exists to remove. Keep every comment on its own line.
+# It never touches the network — enforce that.
+PrivateNetwork=true
+DevicePolicy=closed
+# char-ttyUSB, not /dev/ttyUSB0: systemd resolves a device path to one
+# major:minor at load time, so a reboot that renumbers the port would be blocked
+# even when SOLVEND_SERIAL_PORT uses a stable /dev/serial/by-id/ path.
+DeviceAllow=char-ttyUSB rw
+
+[Install]
+WantedBy=multi-user.target

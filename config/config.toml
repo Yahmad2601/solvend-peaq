@@ -1,0 +1,360 @@
+# Must be the first line. Without it ZeroClaw assumes a pre-v3 layout and reads
+# provider fields from a different shape: `zeroclaw doctor` then reports
+# `model_provider "gemini.default" is valid` while also claiming "no api_key set"
+# and "no model configured" for that exact section, with the key sitting right
+# there in the file. Discovered 2026-08-06 — the original Pi config had this line
+# and worked; overwriting it with a copy that lacked it broke the provider.
+schema_version = 3
+
+# SolVend — ZeroClaw config
+# Target: ~/.zeroclaw/config.toml on the Raspberry Pi 4
+#
+# Custody tier: T1 (BUILD). The agent holds NO private key. It constructs
+# Solana Pay transfer-request URIs and reads getSignaturesForAddress.
+# The customer's own wallet signs. Nothing here can move funds.
+#
+# Key legend:
+#   [V] key name verified against docs.zeroclawlabs.ai/master/en/reference/config.html
+#   [?] shape plausible but NOT verified — confirm with `zeroclaw config get <path>`
+
+# ---------------------------------------------------------------------------
+# MODEL PROVIDER
+# A Pi 4 (4GB) cannot run a local model with reliable tool-calling. Use hosted.
+# ---------------------------------------------------------------------------
+# Alias MUST be `default`. Was `main` until 2026-08-06: `zeroclaw doctor` then
+# reported `model_provider "gemini.default" is valid` alongside "gemini.default:
+# no api_key set" and "no model configured" — it was reading a `default` alias
+# while our key and model sat under `main`, which it silently ignored. The agent
+# had no credentials and no model, and nothing said so directly.
+[providers.models.gemini.default]                      # providers.models.<type>.<alias>
+model = "gemini-3.6-flash"                        # check current ID in Google AI Studio
+api_key = "REDACTED"                                   # encrypted at rest when secrets.encrypt = true
+timeout_secs = 30                                      # [V]
+# Optional keys if you need them: uri (full endpoint override), temperature, max_tokens
+#
+# NOTE: `gemini` = HTTP API with an api_key (what you want).
+#       `gemini_cli` is a DIFFERENT family that shells out to the local `gemini`
+#       CLI binary — do not use it here.
+#
+# DATA DISCLOSURE: Gemini's free tier may use inputs to improve Google's models.
+# Customer handles, item names, and refund payer addresses pass through the model.
+# OTPs, the RPC key, and the ledger never do — those paths have no model in them.
+# Declared in the README threat model. A production operator should use a paid
+# tier or a local model.
+#
+# ^^^ THE BLOCK ABOVE IS A FALLBACK, NOT THE ACTIVE PROVIDER. See groq below.
+
+
+# ACTIVE PROVIDER — Groq. Switched 2026-08-06.
+#
+# Gemini billing could not be enabled (card rejected), and the free tier caps at
+# 20 req/min — it returned 429 on attempt 1/3 of a single CLI call, so it could
+# not serve one customer, let alone a demo. Gemini OAuth was also ruled out:
+# `zeroclaw auth login --model-provider Gemini` demands an `oauth_client_id`,
+# i.e. a Google Cloud OAuth client plus a consent screen.
+#
+# Groq is free, needs no card, and does NATIVE tool calling — which this design
+# depends on entirely, since the model's only job is selecting an invoice tool.
+#
+# Verified on the Pi 2026-08-06: `zeroclaw doctor` 30 ok / 0 errors, both
+# providers valid, Groq catalog 15 models, `agent -m "Reply with the single word:
+# ok"` -> ok, and a real tool dispatch (`Agent wants to execute:
+# envprobe__dump_env`).
+#
+# Alias MUST be `default` here too — same trap as gemini above.
+[providers.models.groq.default]                        # providers.models.<type>.<alias>
+model = "llama-3.3-70b-versatile"
+api_key = "REDACTED"                                   # gsk_... — real value only on the Pi
+timeout_secs = 30
+#
+# DO NOT use `zeroclaw models set <id>` to change this. It targets the wrong
+# provider: it wrote `openai/gpt-oss-120b` onto gemini.default, not groq. Edit
+# the `model =` line under the right block by hand.
+#
+# `models list --model-provider groq` shows only the CONFIGURED model, not the
+# catalog. For the catalog:
+#   curl -s https://api.groq.com/openai/v1/models -H "Authorization: Bearer $KEY"
+# Alternatives if llama-3.3-70b-versatile disappoints: openai/gpt-oss-120b,
+# moonshotai/kimi-k2-instruct, qwen/qwen3.6-27b.
+#
+# A doctor run once showed a transient `Groq model list request failed` that
+# cleared by itself. Catalog fetch is not inference — test inference before
+# chasing it.
+
+
+# ---------------------------------------------------------------------------
+# CHANNELS — two Telegram bots, deliberately separate
+#
+# Originally WhatsApp web mode. Changed 2026-08-06: `zeroclaw channel list` on
+# the Pi reports "WhatsApp (configured, not compiled)" — the stock release binary
+# ships without the WhatsApp feature, so no configuration can enable it. Getting
+# it needs a from-source build (`--features channels-full`), which on a Pi 4 is a
+# multi-hour Rust compile with real OOM risk. Telegram is compiled, long-polls
+# (so still no ingress, no tunnel, no app review), and costs the design nothing:
+# the customer talks to a chat bot either way.
+#
+# TWO SEPARATE BOTS, not one with two aliases. The security property is that
+# approvals leave the customer's reach — a customer must not be able to send
+# messages anywhere near the approval route. Same-bot separation would rest only
+# on the chat-id membership check; separate bots make it structural. Create the
+# second one in BotFather, it takes a minute.
+# ---------------------------------------------------------------------------
+[channels.telegram.shop]                               # [V] channels.telegram.<alias>
+enabled = true
+bot_token = "REDACTED-CUSTOMER-BOT"                    # customer-facing bot
+dm_policy = "all"                                      # [V] allowlist | ignore | all — customers DM the vending machine
+group_policy = "ignore"                                # [V] no group traffic
+interrupt_on_new_message = false                       # [V] never abandon a half-finished invoice
+
+# Operator channel. Telegram long-polls, so it also needs no ingress.
+# Approvals and refund checkpoints route here, NOT to the customer channel.
+[channels.telegram.operator]                           # [V] channels.telegram.<alias>
+enabled = true
+bot_token = "REDACTED-OPERATOR-BOT"                    # [V] a DIFFERENT bot from telegram.shop
+
+
+# ---------------------------------------------------------------------------
+# HTTP TOOL — the entire Solana surface at T1
+# allowed_domains is your real security boundary. Keep it to two hosts.
+# ---------------------------------------------------------------------------
+[http_request]                                         # [V]
+enabled = true                                         # [V]
+allowed_domains = [                                    # [V] default is ["*"] — do NOT leave it open
+  "mainnet.helius-rpc.com",
+  "api.mainnet-beta.solana.com",                       # fallback if Helius rate-limits
+]
+allow_private_hosts = false                            # [V] SSRF guard stays on
+timeout_secs = 15                                      # [V] default 30
+max_response_size = 262144                             # [V] 256 KiB. Trap #3: a fat RPC reply nukes your context.
+
+# RPC key handling. Bounty rule: keys live in config, never in code, never in a
+# skill body (skill text is model-visible and lands in the transcript).
+#
+# There was a [http_request.secrets.helius] table here. REMOVED 2026-08-06:
+# ZeroClaw has no such schema, and an unrecognised sub-table does not fail
+# loudly — `zeroclaw doctor` reported "config section 'http_request' is malformed
+# and was reset to defaults", which silently restored allowed_domains = ["*"] and
+# turned off the SSRF guard. The one section whose whole job is to be a security
+# boundary was the one being discarded, and nothing about the running system
+# looked wrong. Verified fixed on the Pi: 0 errors once the table was gone.
+#
+# No key is needed here anyway. solvend.py reaches Helius via SOLVEND_RPC_URL from
+# /etc/solvend/env (chmod 600), never through the http_request tool — which stays
+# enabled and domain-locked as hardening, not as a dependency.
+
+
+# ---------------------------------------------------------------------------
+# RISK PROFILE — fail-closed
+# ---------------------------------------------------------------------------
+[risk_profiles.vending]                                # [V] risk_profiles.<alias>
+# One entry, not empty. A script tool is still a command, and an empty allowlist
+# is what refused the poller earlier today. This permits exactly the invoice
+# wrapper - no shell, no interpreter, no `amount` parameter anywhere in it.
+allowed_commands = ["/opt/solvend/bin/solvend-run.sh-invoice"]
+
+# Every name below was read from the running agent, not guessed:
+#   zeroclaw agent -a solvend -m "List every tool available to you, by exact name."
+#
+# The previous value was ["browser", "file_download"] — and NEITHER NAME EXISTS.
+# The real tool is `browser_open`; there is no `file_download` at all. The list
+# matched nothing, so the chat-facing agent had `shell`, `file_write`, `cron_add`,
+# `http_request`, `spawn_subagent` and 40 more reachable from any customer
+# message. `allowed_commands = []` still blocked shell *execution*, but the tools
+# were offered to the model and most of them never touch the command allowlist.
+#
+# Symptom that exposed it: a "Tool approval required — sessions_list" prompt with
+# Approve/Deny buttons appeared in the CUSTOMER chat, which is precisely the
+# boundary this design exists to enforce.
+#
+# There is no allowlist key on risk profiles, and inventing one is dangerous —
+# an unrecognised key makes ZeroClaw discard the whole section and fall back to
+# defaults (i.e. no restrictions), silently. So this is an explicit denylist of
+# every built-in. Skill tools are namespaced `<skill>__<tool>` and are not
+# excluded; they are the only surface the customer agent should have.
+#
+# Re-run the enumeration command after any ZeroClaw upgrade — a new built-in
+# would arrive un-excluded.
+#
+# RESULT after this list landed: the enumeration went 49 tools -> 3. The three
+# survivors were `browser`, `dispense-otp__check_payments`, `envprobe__dump_env`.
+#   * `browser` is a SEPARATE tool from `browser_open` and needs its own entry —
+#     both are listed below. Excluding only `browser_open` left it reachable.
+#   * `envprobe` was the throwaway skill that proved script tools receive no
+#     caller context (see skills/solana-pay-invoice/SKILL.toml). Remove the skill
+#     when the build is frozen; it dumps the environment to whoever asks.
+excluded_tools = [
+  "shell", "file_read", "file_write", "file_edit", "glob_search", "content_search",
+  "cron_add", "cron_list", "cron_remove", "cron_update", "cron_run", "cron_runs",
+  "memory_store", "memory_recall", "memory_forget", "memory_export", "memory_purge",
+  "schedule", "spawn_subagent", "send_message_to_peer",
+  "model_routing_config", "model_switch", "proxy_config",
+  "git_operations", "git_forge", "pushover", "calculator", "weather", "canvas",
+  "TodoWrite", "llm_task", "browser", "browser_open", "http_request", "web_fetch",
+  "web_search_tool", "backup", "screenshot", "image_info",
+  "sessions_current", "sessions_list", "sessions_history", "sessions_send",
+  "poll", "reaction", "channel_room", "ask_user", "send_via",
+  "escalate_to_human", "delegate",
+]
+forbidden_paths = ["~/.zeroclaw/config.toml", "/var/lib/zeroclaw"]   # [V]
+
+[risk_profiles.vending.approval_route]                 # [V]
+approver_channel = "telegram.operator"                 # [V] approvals leave the customer's reach
+timeout_secs = 300                                     # [V] default 120
+on_no_approver = "deny"                                # [V] fail closed — this is the line judges look for
+
+[runtime_profiles.vending]                             # runtime_profiles.<alias>
+# REAL SCHEMA, read off a running v0.8.4 instance 2026-08-06. The previous value
+# here was `max_iterations = 8` — NOT A REAL KEY. ZeroClaw silently discarded the
+# whole section and substituted defaults, which shipped `agentic = false` and
+# `max_tool_iterations = 0`: the agent could not call tools at all. That is the
+# fourth time an unrecognised key has caused a section to be dropped without an
+# error (see also http_request.secrets, [cron.*], [tools.args]).
+agentic = true                                         # false => no tool loop at all
+max_tool_iterations = 3                                # the agent needs ~3: parse, call, reply
+max_actions_per_hour = 20
+max_cost_per_day_cents = 500                           # hard spend ceiling
+max_delegation_depth = 0                               # no subagents
+shell_timeout_secs = 60
+strict_tool_parsing = false
+tool_call_dedup_exempt = []
+tool_filter_groups = []                                # [?] possible allowlist mechanism — unexplored
+
+
+# ---------------------------------------------------------------------------
+# SKILLS
+# ---------------------------------------------------------------------------
+[skill_bundles.solvend]                                # [V] skill_bundles.<alias>
+# `refund` is deliberately NOT here. Tool arguments do not exist in v0.8.4, and
+# a refund is meaningless without an invoice id, so a refund tool could only
+# either fail at runtime in the customer's chat or guess which invoice was meant.
+# Refunds are an operator CLI action instead — see skills/refund/SKILL.toml.
+# The upside is a stronger property than the one we gave up: the chat-facing
+# agent has no refund tool at all, so no message can start a refund.
+skills = ["solana-pay-invoice", "dispense-otp"]        # [?] confirm key name (skills vs members)
+
+
+# ---------------------------------------------------------------------------
+# AGENT
+# ---------------------------------------------------------------------------
+[agents.solvend]                                       # [V] agents.<alias>
+enabled = true                                         # [V]
+channels = ["telegram.shop", "telegram.operator"]      # [V]
+model_provider = "groq.default"                        # [V] "<type>.<alias>" — NOT the full
+                                                       # providers.models.* path. Validated at
+                                                       # startup, so a wrong value fails loudly.
+                                                       # Was gemini.default; free tier 429'd. The
+                                                       # gemini block is kept as a fallback.
+risk_profile = "vending"                               # [V]
+runtime_profile = "vending"                            # [V]
+skill_bundles = ["solvend"]                            # [V]
+
+# ---------------------------------------------------------------------------
+# POLLER IDENTITY — separate on purpose
+#
+# A `zeroclaw cron add` job runs AS an agent and inherits that agent's risk
+# profile. Registering the poller under `solvend` fails, correctly:
+#   Error: blocked by security policy: Command not allowed: solvend-poll.sh
+# because [risk_profiles.vending] has allowed_commands = [].
+#
+# The wrong fix is to allow the script in `vending` — that hands shell execution
+# to the identity that talks to customers, which is the one thing this design is
+# built to prevent. Instead the poller gets its own agent with no channels, no
+# skills, and an allowlist of exactly one command. Nothing a customer says can
+# reach this identity: it has no channel to be reached on.
+# ---------------------------------------------------------------------------
+[risk_profiles.poller]
+allowed_commands = ["/opt/solvend/bin/solvend-poll.sh"]   # exactly one, absolute
+
+# Same denylist as `vending`, and for the same reason: the old value here was
+# ["browser", "file_download", "http_request"], and `file_download` is not a real
+# tool name — the entry matched nothing. This identity has no channels, so no
+# customer can reach it, but it is the identity that is allowed to run a shell
+# script, so it gets the strictest list rather than the loosest.
+#
+# Excluding "shell" does NOT break the poller. The cron entry is registered as a
+# shell job (`zeroclaw cron add --agent solvend_poller '* * * * *' '<script>'`
+# with NO --prompt), so the scheduler runs the command directly. It never goes
+# through the model or the shell TOOL. That is what makes it cost zero tokens.
+excluded_tools = [
+  "shell", "file_read", "file_write", "file_edit", "glob_search", "content_search",
+  "cron_add", "cron_list", "cron_remove", "cron_update", "cron_run", "cron_runs",
+  "memory_store", "memory_recall", "memory_forget", "memory_export", "memory_purge",
+  "schedule", "spawn_subagent", "send_message_to_peer",
+  "model_routing_config", "model_switch", "proxy_config",
+  "git_operations", "git_forge", "pushover", "calculator", "weather", "canvas",
+  "TodoWrite", "llm_task", "browser", "browser_open", "http_request", "web_fetch",
+  "web_search_tool", "backup", "screenshot", "image_info",
+  "sessions_current", "sessions_list", "sessions_history", "sessions_send",
+  "poll", "reaction", "channel_room", "ask_user", "send_via",
+  "escalate_to_human", "delegate",
+]
+forbidden_paths = ["~/.zeroclaw/config.toml", "/var/lib/zeroclaw"]
+
+[agents.solvend_poller]
+enabled = true
+channels = []                                          # unreachable by any customer
+model_provider = "groq.default"                        # required by config; never invoked —
+                                                       # the cron job is a shell command, not a
+                                                       # --prompt, so no model call is made
+risk_profile = "poller"
+runtime_profile = "vending"
+
+[agents.solvend_poller.memory]
+enabled = false                                        # stateless: it reads SQL, not memory
+
+[agents.solvend.memory]                                # [V] per-agent memory backend
+enabled = true                                         # operator preferences and conversation continuity ONLY.
+                                                       # The invoice ledger is NOT here — see note below.
+
+# Where the SOP engine finds payment-watcher/
+sops_dir = "/var/lib/zeroclaw/agents/solvend/workspace/sops"   # [?] confirm key name; default is <workspace>/sops
+
+# LEDGER LOCATION — deliberate. Invoice state lives in /var/lib/solvend/solvend.db,
+# owned by solvend.py, NOT in agent memory. Agent memory is written and read
+# through the model, which makes it non-atomic and injectable; "mark this invoice
+# paid" is a sentence someone can put in a Telegram message. Money state belongs
+# behind a UPDATE...WHERE the model cannot reach.
+
+
+# ---------------------------------------------------------------------------
+# SOP ENGINE — cron dispatch requires the maintenance tick
+# ---------------------------------------------------------------------------
+[scheduler]                                            # [V]
+maintenance_interval_secs = 60                         # [V] default 60; cron SOPs are polled by this tick,
+                                                       # so 60s is your true floor on payment-detection latency
+
+# ---------------------------------------------------------------------------
+# MINUTE POLLER — shell cron job, NOT an SOP, NOT an agentic run.
+# The payment-watcher SOP is retained for manual/observability runs, but this
+# is what actually polls: 1440 executions/day at zero tokens. The model is
+# invoked only when solvend-poll.sh decides there is something to decide.
+# ---------------------------------------------------------------------------
+[cron.solvend_poll]                                    # [V] cron.<alias>, shell or agentic
+enabled = true
+schedule = "* * * * *"                                 # [?] confirm key name (schedule vs expression)
+kind = "shell"                                         # [?] confirm discriminator
+command = "/opt/solvend/bin/solvend-poll.sh"
+timeout_secs = 45                                      # must stay under the 60s tick
+
+# ---------------------------------------------------------------------------
+# REFUND APPROVALS — gateway subjects, not chat handles.
+# ---------------------------------------------------------------------------
+[sop.approval.groups.shop_operator]                    # [V] structure from sop/syntax.md
+members = ["http:OPERATOR_SUBJECT_ID"]                 # [?] confirm a telegram: scheme exists;
+                                                       # if not, approve via `zeroclaw sop approve`
+
+[sop.approval.policies.refund]                         # [V]
+required_group = "shop_operator"
+quorum = 1
+request_route = "telegram.operator:OPERATOR_CHAT_ID"   # [V] request_route format from docs
+
+[security]
+encrypt = true                                         # [?] confirm exact path (secrets.encrypt vs security.encrypt)
+
+# Default search_mode is "hybrid", which wants an embedding provider we do not
+# configure — doctor warns and silently falls back to keyword search anyway.
+# Ask for bm25 explicitly so the behaviour is chosen rather than degraded into.
+# The agent's memory is chat context only; the invoice ledger is SQLite and is
+# never searched through this.
+[memory]
+search_mode = "bm25"

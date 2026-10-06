@@ -94,6 +94,32 @@ deploy/                   bootstrap, deploy, systemd units
 - **The user controls git.** Never commit, push or branch. Report changed files.
 - **Verify, don't infer.** Read the schema, the `--help`, the actual file. If
   asked "did you verify that or infer it?", the answer must be *verified*.
+
+- **When uncertain about anything peaq-specific, ASK — don't guess.**
+  There is an AI assistant on **docs.peaq.xyz** that answers from the real docs.
+  It has already resolved in minutes things that would otherwise have been
+  guessed wrong for days.
+
+  Whenever a contract address, SDK signature, config key, env variable, limit,
+  threshold, chain id, endpoint or tier price is not *verified*, do all three:
+
+  1. Mark it `UNVERIFIED` in the code or doc, right where it is used
+  2. Emit a copy-pasteable block for the user, like this:
+
+     > **ASK THE DOCS ASSISTANT (docs.peaq.xyz):**
+     > 1. <one precise question, naming the exact field or function>
+     > 2. <another>
+
+     Questions must be specific enough to be answered without context —
+     name the method, the field, the network. "How does activation work?" is
+     useless; "What is the `tier` argument range for `activate_machine` on
+     agung, and what does each value cost?" is answerable.
+  3. Record the answer in **`peaq/DOCS-ANSWERS.md`** once it comes back, and
+     remove the `UNVERIFIED` marker.
+
+  Never write a plausible-looking address, hash, signature or magic number into
+  the codebase to keep moving. A wrong constant fails silently and costs more
+  than the hour spent asking.
 - **Capture evidence the day it happens** — see `EVIDENCE.md`. A judge cannot
   score what was not captured. This is the single biggest lesson from the last
   bounty, which was lost on evidence, not engineering.

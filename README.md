@@ -8,7 +8,7 @@ a gantry drops a can. It runs on a Raspberry Pi inside the machine, driving an
 ESP32 that moves the motors.
 
 This repo makes it an economic participant. SolVend holds a **peaq machine
-identity**, and every can it sells is published on-chain as a revenue event — so
+identity**, and every can it sells is published on-chain as a revenue event, so
 its **Machine Credit Rating is built from real trade**, not simulated telemetry.
 
 **Most Machine Economy demos simulate a machine. This one takes money from

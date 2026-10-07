@@ -45,7 +45,9 @@ duplicates is worse than no score at all.
 
 Env (via /etc/solvend/env with `set -a`, or .env):
     PEAQOS_RPC_URL            https://peaq-agung.api.onfinality.io/public
-    PEAQOS_PRIVATE_KEY        machine's own key — NEVER the merchant wallet
+    PEAQ_WALLET               OWS vault wallet name (`solvend`) — the machine's
+                              own wallet, NEVER the merchant wallet
+    OWS_PASSPHRASE            unlocks it; read by PeaqosClient.from_wallet()
     TOKENOMICS_DEPLOYMENT_ID  agung-2026-08-28
     PEAQ_MACHINE_ID           written here by --activate
     PEAQ_MACHINE_DID          written here by --activate
@@ -85,16 +87,32 @@ def utc_day(epoch_secs):
 # ---------------------------------------------------------------------------
 # SDK boundary — the only part the Day 1 spike changes. See peaq/SPIKE.md.
 #
-# Verified from docs.peaq.xyz: synchronous SDK, snake_case methods.
-#   client.activate_machine(ActivateMachineParams(...)) -> result.machine_id
-#   client.submit_event(machine_id=, event_type=, value=, currency=,
-#                       timestamp=, raw_data=, trust_level=,
-#                       source_chain_id=, source_tx_hash=, metadata=)
-#       -> (tx_hash, data_hash)
-#   Credit rating is read from GET /mcr/{did}
+# Verified by inspect.signature() on the Pi, peaq-os-cli 0.0.15 / SDK 0.11.0
+# (7 Oct 2026). peaq_os_sdk has no __version__; use `peaqos --version`.
+#
+#   PeaqosClient.from_wallet(name_or_id, passphrase=None, ows_signing=True,
+#                            vault_path=None, **config_kwargs)
+#       passphrase falls back to OWS_PASSPHRASE. NOT verified at construction:
+#       a wrong passphrase only surfaces on the first signature.
+#   client.activate_machine(params: ActivateMachineParams) -> ActivateMachineResult
+#       raises TokenomicsConfigError if the client has no tokenomics20.
+#   client.submit_event(*, machine_id: int, event_type: int, value: int,
+#                       timestamp: int, raw_data: bytes|None, trust_level: int,
+#                       source_chain_id: int, source_tx_hash: Hex32|None,
+#                       metadata: bytes, currency: str|None) -> (str, bytes)
+#       value is an ISO 4217 subunit int; float/Decimal/str/None -> TypeError.
+#       machine_id is an INT. MACHINE_ID above is a str from env: cast it.
+#   client.query_mcr(...) reads the credit rating. PEAQOS_MCR_API_URL defaults
+#       to http://127.0.0.1:8000. UNVERIFIED: real MCR API URL for agung.
+#   EVENT_TYPE_REVENUE == 0, TRUST_SELF_REPORTED == 0
+#   SUPPORTED_CHAINS == {peaq:3338, ethereum:1, base:8453, polygon:137,
+#                        arbitrum:42161, optimism:10}   (no Solana, no agung)
+#       UNVERIFIED: which source_chain_id a Solana-settled event should carry.
 #
 # Activate against Economics 2.0:
 #   tokenomics20=Tokenomics20Config(deployment_id=DEPLOYMENT_ID)
+#   UNVERIFIED: how Tokenomics20Config is passed through from_wallet's
+#   **config_kwargs.
 # ---------------------------------------------------------------------------
 
 def _client():

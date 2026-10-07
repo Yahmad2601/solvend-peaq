@@ -174,9 +174,16 @@ BATCH_PRECOMPILE_ADDRESS=0x0000000000000000000000000000000000000805
 > new machines on agung activate against Economics 2.0 instead." So pass
 > `tokenomics20=Tokenomics20Config(deployment_id="agung-2026-08-28")`.
 
-> **Home the machine on peaq, not Solana.** The `[solana]` extra enables
-> `peaqos activate --chain solana`, but **"Solana onboarding is currently paused
-> for CLI 0.0.14 / SDK 0.10.0."** Don't build on a paused path with six days.
+> **Home the machine on peaq, not Solana.** Solana onboarding was paused in
+> CLI 0.0.14 and is live again in 0.0.15, but it is **mainnet only**: there's
+> no Solana testnet, so the bond is real and can't be rehearsed. Not something
+> to take on with six days left.
+
+> **Signing: use `PeaqosClient.from_wallet()`, not `from_env()`.** The key
+> stays in the encrypted OWS vault on the Pi, and the service reads
+> `OWS_PASSPHRASE` from its environment. `PEAQOS_PRIVATE_KEY` below is then not
+> needed. This section gets rewritten once the real `from_wallet` signature on
+> SDK 0.11.0 is confirmed. See `DOCS-ANSWERS.md`.
 
 ```bash
 chmod 600 .env

@@ -47,10 +47,19 @@ Python 3.13.5
 Screenshot: `...` *(save the terminal screenshot into the repo and link it here)*
 Still needed for claim 1: photo/video of the machine.
 
+**peaqOS on the device** (captured 7 Oct 2026, inside `~/solvend-peaq/.peaq` venv)
+```
+$ peaqos --version
+peaq-os-cli 0.0.15 (peaq_os_sdk 0.11.0)
+```
+All native deps installed as prebuilt `aarch64` wheels; no compilation.
+Screenshot: `...` *(save into the repo and link here)*
+
 **Machine identity**
 - DID: `...`
 - Activation tx: `...`
-- Owner address: `...`
+- Owner address: `0x60901F3fC014Eb097411720f55f247a5E6652996` (OWS wallet
+  `solvend`, generated on the Pi 7 Oct 2026, key never left the device)
 
 **Revenue events**
 

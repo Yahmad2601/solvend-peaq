@@ -30,10 +30,7 @@ Python SDK: `peaq-os-sdk`, requires **Python ≥ 3.10**, **synchronous** (uses
 
 ---
 
-## Stage 0 — Prerequisites (do the faucet first)
-
-The faucet is the long pole: it needs 2FA and you cannot activate a machine
-without PEAQ for the bond and gas.
+## Stage 0 — Prerequisites
 
 ```bash
 ssh pi@solvend.local
@@ -41,16 +38,22 @@ python3 --version          # need >= 3.10
 sudo apt update && sudo apt install -y python3-venv python3-dev build-essential
 ```
 
-**In a browser now:** open `https://depinstation.peaq.xyz`, complete 2FA, and
-fund the address you will use. Keep that wallet's private key — it becomes
-`PEAQOS_PRIVATE_KEY`.
+**There is no browser faucet.** `https://depinstation.peaq.xyz` is an API root
+(a browser gets a JSON 404, which is expected). Funding happens from the CLI:
+`peaqos activate` detects an under-funded signing wallet, triggers 2FA
+enrollment, and funds it via the Gas Station API. The wallet itself is created
+on the Pi with `peaqos wallet create` (Stage 1a). No MetaMask/Phantom needed.
+See `DOCS-ANSWERS.md` → Gas Station, Wallet.
+
+*Done 7 Oct 2026:* Pi 4 Model B Rev 1.5, aarch64, Debian 13 trixie,
+Python 3.13.5, clock synced.
 
 > `build-essential` and `python3-dev` are not optional. Some Ethereum
 > dependencies (`coincurve`, `cytoolz`) build native extensions, and on ARM pip
 > may have no prebuilt wheel. Without a compiler the install fails with a wall
 > of C errors that looks like a broken package but isn't.
 
-**Pass:** Python ≥ 3.10, and a funded agung address.
+**Pass:** Python ≥ 3.10 and build tools installed. (Funding moves to Stage 6.)
 
 ---
 

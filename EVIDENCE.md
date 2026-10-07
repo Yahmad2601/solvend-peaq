@@ -33,6 +33,20 @@ Claim 7 is the one a technical judge will probe. Have the terminal output ready.
 
 Paste links, hashes and paths as you get them.
 
+**Hardware** (claim 1, captured 7 Oct 2026 over SSH to `pi@solvend`)
+```
+$ cat /proc/device-tree/model
+Raspberry Pi 4 Model B Rev 1.5
+$ uname -m
+aarch64
+$ grep PRETTY_NAME /etc/os-release
+PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+$ python3 --version
+Python 3.13.5
+```
+Screenshot: `...` *(save the terminal screenshot into the repo and link it here)*
+Still needed for claim 1: photo/video of the machine.
+
 **Machine identity**
 - DID: `...`
 - Activation tx: `...`

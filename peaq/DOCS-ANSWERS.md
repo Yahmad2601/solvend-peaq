@@ -101,7 +101,49 @@ not in that table.**
 
 *Verified 6 Oct 2026.*
 
+## Gas Station (faucet) — API only, no browser UI
+
+> "The documentation only describes the Gas Station as a **CLI/SDK faucet
+> service** (`PEAQOS_GAS_STATION_URL=https://depinstation.peaq.xyz`), not a
+> browser UI you connect a wallet to or paste an address into. The flow is:
+> `peaqos activate` detects a signing wallet with insufficient gas, **triggers
+> 2FA enrollment**, and funds that wallet programmatically through the Gas
+> Station API — there's no mention of a WalletConnect/MetaMask connection or a
+> manual address-paste form."
+
+Confirmed in practice: opening the URL in a browser returns
+`{"name":"NotFound","message":"Page not found","code":404,...}`. That is
+expected — it is an API root, not a broken faucet.
+
+> "The cap values, rate-limit windows, and minimum gas balance are configured
+> server-side, so branch on the error codes and the `skipped` status rather
+> than hard-coding numbers."
+
+→ **No published PEAQ amount per request**, and no guarantee one funding covers
+Entry bond + gas. Call `fundFromGasStation`, then compare `fundedAmount` /
+`currentBalance` against the live `previewMachineActivation` bond.
+
+*Verified 7 Oct 2026. Used in: `peaq/SPIKE.md` Stage 0.*
+
+## Wallet / key generation — built into the CLI
+
+> "`peaqos wallet create <name>` (requires the `[ows]` extra) generates a new
+> BIP-39 mnemonic-backed wallet and derives EVM/Solana accounts for it, stored
+> in the encrypted local vault at `~/.ows/wallets/`. You can also import an
+> existing raw EVM private key via `peaqos wallet import <name>
+> --private-key-file <path>`. So key generation is built into the CLI — no need
+> to create it externally."
+
+→ **No MetaMask/Phantom/Solflare needed.** Generate the machine's wallet on the
+Pi itself, so the key never exists on a laptop.
+
+*Verified 7 Oct 2026. Used in: `peaq/SPIKE.md` Stage 1a.*
+
 ## Raspberry Pi
+
+Confirmed on the actual machine (7 Oct 2026): `Raspberry Pi 4 Model B Rev 1.5`,
+`aarch64`, Debian 13 (trixie), **Python 3.13.5**, clock NTP-synchronised,
+24G disk free, 3.7Gi RAM. No Node installed.
 
 > "The docs don't mention Raspberry Pi specifically, but the install steps are
 > the same for any Linux-based device (Python/pip, Node/npm)."
@@ -118,6 +160,16 @@ Python SDK: `pip install -U peaq-os-sdk python-dotenv` — **synchronous**, uses
 ---
 
 ## Still to ask
+
+- [ ] Does `PeaqosClient.from_env()` (Python SDK 0.10.0) read a wallet from the
+      OWS vault created by `peaqos wallet create`, or does it only accept a raw
+      `PEAQOS_PRIVATE_KEY`? If only the raw key, how is it exported from
+      `~/.ows/wallets/`?
+- [ ] What 2FA method does Gas Station enrollment during `peaqos activate` use
+      (TOTP authenticator app, email, other), and can it complete over an SSH
+      session with no browser on the device?
+- [ ] Does `peaqos activate --dry-run` call the Gas Station, or is funding
+      triggered only on a real (non-dry-run) activation?
 
 - [ ] What are the exact agung Tokenomics 1.0 contract addresses? *(copy from
       the "peaqOS Smart Contracts" page rather than transcribing)*

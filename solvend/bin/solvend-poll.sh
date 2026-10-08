@@ -57,6 +57,21 @@ for p in d.get("newly_paid",[]):
       || logger -t solvend "OTP delivery FAILED for $recip"   # [?] verify --channel-id accepts an alias
 done
 
+# Revenue reporting to peaq. Same SHELL job as settlement, no model in the
+# loop: a dead model provider cannot stop it. machine.py exits early when no
+# UTC day has cleared $10, so most minutes this builds no client and signs
+# nothing. It runs under the peaq venv's interpreter, resolved absolutely
+# (a scheduler's PATH has no venv). Skipped until the machine is activated.
+PEAQ_PY="${PEAQ_PYTHON:-/home/pi/solvend-peaq/.peaq/bin/python3}"
+if [ -n "${PEAQ_MACHINE_ID:-}" ] && [ -x "$PEAQ_PY" ]; then
+    PEAQ_OUT=$("$PEAQ_PY" /opt/solvend/peaq/machine.py --sync 2>&1) \
+      || logger -t solvend-peaq "sync exited non-zero"
+    case "$PEAQ_OUT" in
+        *'"submitted": 0'*) ;;
+        *) printf '%s\n' "$PEAQ_OUT" | logger -t solvend-peaq ;;
+    esac
+fi
+
 # Wake the agent only for things needing judgment.
 EXPIRED=$(printf '%s' "$OUT" | python3 -c '
 import json,sys; d=json.load(sys.stdin); print(",".join(d.get("expired",[])))')

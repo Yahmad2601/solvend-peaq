@@ -37,41 +37,72 @@ IDEMPOTENCY IS THE WHOLE GAME. A retry, a restart mid-batch, or an operator
 running this by hand must never double-report. An inflated score built on
 duplicates is worse than no score at all.
 
-    python3 peaq/machine.py --spike      # day 1: prove the SDK works at all
+    python3 peaq/machine.py --spike      # build a signing client, read chain id
+    python3 peaq/machine.py --activate-preview   # free dry run, signs nothing
     python3 peaq/machine.py --activate   # one-time: mint the machine identity
     python3 peaq/machine.py --sync       # publish any UTC day that cleared $10
     python3 peaq/machine.py --dry-run    # show what WOULD be published
     python3 peaq/machine.py --status     # DID, credit, reported, pending
 
-Env (via /etc/solvend/env with `set -a`, or .env):
-    PEAQOS_RPC_URL            https://peaq-agung.api.onfinality.io/public
-    PEAQ_WALLET               OWS vault wallet name (`solvend`) — the machine's
+Env (via /etc/solvend/env with `set -a`, or the repo-root .env):
+    PEAQOS_RPC_URL            https://quicknode1.peaq.xyz  (peaq mainnet, 3338)
+    PEAQOS_OWS_WALLET         OWS vault wallet name (`solvend`) — the machine's
                               own wallet, NEVER the merchant wallet
     OWS_PASSPHRASE            unlocks it; read by PeaqosClient.from_wallet()
-    TOKENOMICS_DEPLOYMENT_ID  agung-2026-08-28
-    PEAQ_MACHINE_ID           written here by --activate
-    PEAQ_MACHINE_DID          written here by --activate
+    TOKENOMICS_DEPLOYMENT_ID  peaq-mainnet (agung has no MCR — DOCS-ANSWERS.md)
+    PEAQOS_MCR_API_URL        https://mcr.peaq.xyz
+    IDENTITY_REGISTRY_ADDRESS, IDENTITY_STAKING_ADDRESS, EVENT_REGISTRY_ADDRESS,
+    MACHINE_NFT_ADDRESS, DID_REGISTRY_ADDRESS, BATCH_PRECOMPILE_ADDRESS
+                              required by the client constructor
+    PEAQ_MACHINE_ID           base-10 machine ID, recorded after --activate
     SOLVEND_DB                ledger path (default /var/lib/solvend/solvend.db)
 """
 import datetime as dt
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 import time
 from collections import defaultdict
 
+try:
+    # Hand runs pick up the repo-root .env. The poller sources /etc/solvend/env
+    # first, and override=False means the env file always wins.
+    from dotenv import load_dotenv
+    load_dotenv(override=False)
+except ImportError:
+    pass
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 DB = os.environ.get("SOLVEND_DB", "/var/lib/solvend/solvend.db")
-RPC_URL = os.environ.get("PEAQOS_RPC_URL",
-                         "https://peaq-agung.api.onfinality.io/public")
-DEPLOYMENT_ID = os.environ.get("TOKENOMICS_DEPLOYMENT_ID", "agung-2026-08-28")
+RPC_URL = os.environ.get("PEAQOS_RPC_URL", "https://quicknode1.peaq.xyz")
+DEPLOYMENT_ID = os.environ.get("TOKENOMICS_DEPLOYMENT_ID", "peaq-mainnet")
+MCR_API_URL = os.environ.get("PEAQOS_MCR_API_URL", "https://mcr.peaq.xyz")
+WALLET = os.environ.get("PEAQOS_OWS_WALLET", "solvend")
 MACHINE_ID = os.environ.get("PEAQ_MACHINE_ID", "")
-MACHINE_DID = os.environ.get("PEAQ_MACHINE_DID", "")
+# Tokenomics mode DID is "did:peaq:" + the base-10 machine ID (query_mcr docstring).
+MACHINE_DID = f"did:peaq:{MACHINE_ID}" if MACHINE_ID else ""
 
 USDC_DECIMALS = 6          # SolVend ledger precision
 MIN_REVENUE_CENTS = 1000   # peaq: a day below $10 does not count toward the MCR
 CURRENCY = "USD"           # ISO 4217; value is in minor units of this
-SOURCE_CHAIN_PEAQ = 3338
+# Solana is not a supported source chain, so a Solana-settled sale is reported
+# as off-chain (0) with no source_tx_hash. Verified, DOCS-ANSWERS.md.
+SOURCE_CHAIN_OFFCHAIN = 0
+METADATA = b'{"schema":"solvend.revenue.v1"}'   # metadata is required; max 4096 B
+
+# Permanent identity inputs, validated by a mainnet dry run on 8 Oct 2026.
+# machine_type + credential_subject fix the machine ID forever. Never edit.
+MACHINE_TYPE = "VendingMachine"
+TIER = "entry"
+CREDENTIAL_SUBJECT_FILE = os.path.join(HERE, "credential-subject.json")
+DID_DOCUMENT_FILE = os.path.join(HERE, "did-document.json")
+
+_CLIENT_ENV = ("PEAQOS_RPC_URL", "IDENTITY_REGISTRY_ADDRESS",
+               "IDENTITY_STAKING_ADDRESS", "EVENT_REGISTRY_ADDRESS",
+               "MACHINE_NFT_ADDRESS", "DID_REGISTRY_ADDRESS",
+               "BATCH_PRECOMPILE_ADDRESS")
 
 
 def to_cents(amount_base):
@@ -115,6 +146,10 @@ def utc_day(epoch_secs):
 # from_wallet config_kwargs (docs example): rpc_url, identity_registry,
 #   identity_staking, event_registry, machine_nft, did_registry,
 #   batch_precompile.
+# UNVERIFIED until --spike/--sync run on the Pi: that wrapping addresses in
+#   peaq_os_sdk.Address is accepted, that __init__'s api_url is the MCR URL
+#   (same 127.0.0.1:8000 default as PEAQOS_MCR_API_URL), and that the
+#   submit_event metadata bytes below are accepted as-is.
 # Activate against Economics 2.0 (kwarg verified from PeaqosClient.__init__):
 #   tokenomics20=Tokenomics20Config(deployment_id=DEPLOYMENT_ID)
 #   deployment_id is one of "agung-2026-08-28" | "peaq-mainnet". Only
@@ -124,18 +159,66 @@ def utc_day(epoch_secs):
 #   Tokenomics-mode DID for query_mcr: "did:peaq:" + base-10 machine ID.
 # ---------------------------------------------------------------------------
 
+_client_cache = None
+
+
 def _client():
-    """Construct the peaqOS client. One edit point for the Node/web3 fallback."""
-    raise NotImplementedError(
-        "Day 1 spike not done. See peaq/SPIKE.md.\n"
-        "  pip install -U peaq-os-sdk python-dotenv   (Python >= 3.10)\n"
-        "Then: from peaq_os_sdk import PeaqosClient; return PeaqosClient.from_env()"
-    )
+    """The peaqOS client, signing through the OWS vault. One edit point.
+
+    The key never leaves ~/.ows: from_wallet() signs through OWS and reads the
+    passphrase from OWS_PASSPHRASE. A wrong passphrase is NOT caught here — it
+    surfaces on the first signature.
+    """
+    global _client_cache
+    if _client_cache is None:
+        missing = [k for k in _CLIENT_ENV if not os.environ.get(k)]
+        if missing:
+            raise RuntimeError("missing env: " + ", ".join(missing))
+        from peaq_os_sdk import Address, PeaqosClient, Tokenomics20Config
+        env = os.environ
+        _client_cache = PeaqosClient.from_wallet(
+            WALLET,
+            rpc_url=env["PEAQOS_RPC_URL"],
+            identity_registry=Address(env["IDENTITY_REGISTRY_ADDRESS"]),
+            identity_staking=Address(env["IDENTITY_STAKING_ADDRESS"]),
+            event_registry=Address(env["EVENT_REGISTRY_ADDRESS"]),
+            machine_nft=Address(env["MACHINE_NFT_ADDRESS"]),
+            did_registry=Address(env["DID_REGISTRY_ADDRESS"]),
+            batch_precompile=Address(env["BATCH_PRECOMPILE_ADDRESS"]),
+            api_url=MCR_API_URL,
+            tokenomics20=Tokenomics20Config(deployment_id=DEPLOYMENT_ID),
+        )
+    return _client_cache
 
 
-def peaq_activate():
-    """activateMachine (Economics 2.0) -> {machine_id, did, tx_hash}."""
-    raise NotImplementedError("wire to client.activate_machine()")
+def _credential_subject_hex():
+    """The exact bytes the dry run validated. Read, never regenerated."""
+    with open(CREDENTIAL_SUBJECT_FILE, "rb") as f:
+        return "0x" + f.read().hex()
+
+
+def peaq_activate(dry_run=True):
+    """activateMachine via the CLI, with the inputs the dry run validated.
+
+    Uses the CLI rather than activate_machine() because the CLI path is what
+    was verified end to end, and it shows the activation terms and asks before
+    signing. That is the right shape for a one-time, irreversible mainnet write.
+    Record the printed machine ID as PEAQ_MACHINE_ID.
+    """
+    # Resolve peaqos next to this interpreter: a scheduler's PATH does not
+    # include the venv.
+    peaqos = os.path.join(os.path.dirname(sys.executable), "peaqos")
+    manufacturer = str(_client().address)
+    cmd = [peaqos, "activate",
+           "--machine-type", MACHINE_TYPE,
+           "--credential-subject-hex", _credential_subject_hex(),
+           "--tier", TIER,
+           "--manufacturer", manufacturer,
+           "--did-document", DID_DOCUMENT_FILE]
+    if dry_run:
+        cmd += ["--dry-run", "--json"]
+    rc = subprocess.call(cmd)
+    return {"activate": "dry-run" if dry_run else "submitted", "exit_code": rc}
 
 
 def peaq_submit_revenue(machine_id, cents, timestamp, raw_data):
@@ -143,12 +226,25 @@ def peaq_submit_revenue(machine_id, cents, timestamp, raw_data):
 
     trust_level stays self-reported: see finding 3 in the module docstring.
     """
-    raise NotImplementedError("wire to client.submit_event()")
+    from peaq_os_sdk import EVENT_TYPE_REVENUE, TRUST_SELF_REPORTED
+    tx_hash, _data_hash = _client().submit_event(
+        machine_id=int(machine_id),        # SDK wants an int; env gives a str
+        event_type=EVENT_TYPE_REVENUE,
+        value=int(cents),                  # ISO 4217 minor units; float -> TypeError
+        timestamp=int(timestamp),
+        raw_data=raw_data,
+        trust_level=TRUST_SELF_REPORTED,
+        source_chain_id=SOURCE_CHAIN_OFFCHAIN,
+        source_tx_hash=None,
+        metadata=METADATA,
+        currency=CURRENCY,
+    )
+    return tx_hash
 
 
 def peaq_credit_score(did):
-    """Machine Credit Rating — GET /mcr/{did}."""
-    raise NotImplementedError("wire to the MCR endpoint")
+    """Machine Credit Rating — GET /mcr/{did} on the deployment's MCR."""
+    return dict(_client().query_mcr(did))
 
 
 # ---------------------------------------------------------------------------
@@ -304,21 +400,21 @@ def status():
     }
     try:
         out["credit"] = peaq_credit_score(MACHINE_DID) if MACHINE_DID else None
-    except NotImplementedError:
-        out["credit"] = "sdk not wired yet"
+    except Exception as e:                          # noqa: BLE001
+        # Status is read-only and must never fail on the credit read.
+        out["credit"] = f"unavailable: {type(e).__name__}: {e}"[:200]
     return out
 
 
 def spike():
-    """Day 1: can this Pi import the SDK and construct a client? Nothing else."""
-    report = {"rpc": RPC_URL, "deployment": DEPLOYMENT_ID,
+    """Can this Pi build a signing client and reach the chain? Writes nothing."""
+    report = {"rpc": RPC_URL, "deployment": DEPLOYMENT_ID, "wallet": WALLET,
               "db": DB, "db_exists": os.path.exists(DB)}
     try:
-        _client()
+        c = _client()
+        report["address"] = str(c.address)
+        report["chain_id"] = c.web3.eth.chain_id
         report["sdk"] = "client ok"
-    except NotImplementedError as e:
-        report["sdk"] = "NOT WIRED"
-        report["next"] = str(e).splitlines()[0]
     except Exception as e:                          # noqa: BLE001
         report["sdk"] = f"FAILED: {type(e).__name__}: {e}"[:200]
         report["next"] = "see peaq/SPIKE.md fallback ladder"
@@ -330,8 +426,10 @@ def main():
     cmd = args[0] if args else "--status"
     if cmd == "--spike":
         out = spike()
+    elif cmd == "--activate-preview":
+        out = peaq_activate(dry_run=True)
     elif cmd == "--activate":
-        out = peaq_activate()
+        out = peaq_activate(dry_run=False)
     elif cmd == "--sync":
         out = sync()
     elif cmd == "--dry-run":
@@ -339,7 +437,8 @@ def main():
     elif cmd == "--status":
         out = status()
     else:
-        out = {"error": "usage: machine.py --spike|--activate|--sync|--dry-run|--status"}
+        out = {"error": "usage: machine.py --spike|--activate-preview|--activate"
+                        "|--sync|--dry-run|--status"}
     print(json.dumps(out, indent=2))
     return 0 if "error" not in out else 2
 

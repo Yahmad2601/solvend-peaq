@@ -674,6 +674,91 @@ precompile.
 
 *Verified 8 Oct 2026.*
 
+## PEAQ on Solana: official mint and impostor warning
+
+Fetched directly from https://docs.peaq.xyz/peaqchain/learn/peaq-token-contracts
+(8 Oct 2026), not from a screenshot:
+
+- Official PEAQ mint on Solana: `PEAQjk7SRS6rXHVFFmpRr7zrC4g5ZuEebpwTxvaLr3b`
+  (matches the docs assistant's answer).
+- peaq-side LayerZero OFT adapter (locks native PEAQ):
+  `0xe4103e80c967f58591a1d7cA443ed7E392FeD862`.
+- Every non-peaq PEAQ is a LayerZero V2 OFT, 1:1, mint/burn. Bridged amounts
+  are truncated to 6 decimals (Solana local decimals: 9).
+- "**Impostor tokens named peaq circulate on pump.fun, Clanker, and other
+  launchpads, some with copycat addresses and faked liquidity.** peaq will
+  never DM you a contract address… If an address is not on this page, do not
+  trust it."
+- **No bridging instructions or UI for Solana → peaq EVM on that page.**
+- **8 Oct 2026:** user compared the PEAQ token in Phantom character by character
+  against this mint. **Exact match**, so Phantom's USDC→PEAQ swap is the
+  official token. Phantom shows "Mintable: Yes", which is expected for an OFT
+  (supply minted only by LayerZero messages from the peaq adapter).
+- Docs assistant, 8 Oct: "I don't find documentation naming a specific official
+  app/UI for bridging the PEAQ OFT from Solana to a peaq mainnet EVM address."
+  The documented LayerZero send is the onboarding **link push**, not a token
+  bridge. Sunrise/Wormhole: not mentioned anywhere in the peaq docs.
+  → **Solana PEAQ can't currently reach the machine wallet by a documented
+  route. Don't swap.**
+- Press (cryptobriefing): Wormhole's Sunrise gateway lists PEAQ on Solana with
+  canonical status, integrated with Phantom and Jupiter. Explains why Phantom
+  offers a USDC→PEAQ swap. UNVERIFIED: whether Sunrise or any official UI
+  bridges back to peaq.
+
+## peaqOS on Solana: official announcement (X, @peaq, 17 Sep 2026)
+
+From a screenshot the user shared (8 Oct 2026): "peaqOS is live on @solana.
+Robots and machines can now activate directly on Solana, bond PEAQ, and run
+peaqOS… docs.peaq.xyz/solana". The demo video shows `peaqos init` offering
+`Network (mainnet, testnet, solana)`, Gas Station URL
+`https://depinstation.peaq.xyz`, and a default **Tokenomics 2.0 deployment ID
+`solana-mainnet`**.
+
+⚠ Conflict: the installed SDK 0.11.0 `Tokenomics20DeploymentId` is
+`agung-2026-08-28 | peaq-mainnet | peaq-mainnet-michael`, with **no
+`solana-mainnet`**. Either the video uses another version, or Solana-home rides
+on `peaq-mainnet` with `creation_home='solana'`. UNVERIFIED.
+
+Why it matters: the PEAQ funding blocker exists only for peaq-home. Solana-home
+pays the bond on Solana in PEAQ (OFT) **or USDC** (`--pay-in`), which the
+builder already holds in Phantom. Re-evaluating the "home on peaq" decision.
+
+## Solana-home: what the docs say (8 Oct 2026)
+
+- **Events:** "Solana-homed machines can submit events via `submit_event` or
+  `peaqos qualify event`. The SDK routes it to the **Solana `EventRegistry`
+  program** (not peaq's), signed with the owner's/controller's OWS **Solana**
+  signer… In Python you must set `client.solana_signer` first, or it raises
+  `SIGNER_UNAVAILABLE`."
+- **MCR:** works. Solana-homed responses aren't cached, `mcr_degraded` is
+  always false, and they include `home_chain: 5` plus a `rating_unavailable`
+  reason until the Solana indexer has events (fresh machine: `mcr:
+  "Provisioned"`, `mcr_score: 0`, `rating_unavailable: "no_events_yet"`).
+  Monetization opt-in is refused with `SOLANA_MONETIZATION_UNVERIFIED`, which
+  we don't need.
+- **Deployment:** `TOKENOMICS_DEPLOYMENT_ID=peaq-mainnet` with
+  `Tokenomics20Config(deployment_id="peaq-mainnet", creation_home="solana",
+  solana_rpc_url=...)`. **There is no `solana-mainnet` ID** (the video's
+  default doesn't match SDK 0.11.0).
+- **Funding:** the owner's Solana address needs the pay-in token (PEAQ or USDC)
+  and **≥ 0.015 SOL** per machine (rent-exempt minimum 650,240 lamports, else
+  `INSUFFICIENT_SOL`). **The Gas Station does NOT fund the peaq-side operator
+  registration `[1/7]`.** The docs say "fund… the operator with **0.05 PEAQ on
+  peaq**", as a manual step.
+
+→ **Solana-home still needs PEAQ on peaq: 0.05 instead of ~1.** Same blocker,
+smaller. Untested idea: call `fund_from_gas_station` manually for the operator
+address (owner = the same 2FA-enrolled `0x6090…`). The docs don't say it
+refuses, but don't say it works either.
+
+## Competitor seen (X, 4 Oct 2026)
+
+RoboPay (@KEBNH123, with @yashh_btw, Staex): a PiCar-X on a Pi using "@solana
+for escrow and @peaq for machine identity", built "for @colosseum". Same shape
+as SolVend (Pi + Solana payments + peaq identity). Differentiators to stress:
+real strangers paying for a real product, and **revenue events → Machine
+Credit Rating** (economics, not just identity).
+
 ## Second dry run (8 Oct 2026)
 
 Output saved to `peaq/activation-preview.json`. `machine_id`

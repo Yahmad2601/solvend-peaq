@@ -36,6 +36,11 @@ sudo mkdir -p /opt/solvend /var/lib/solvend /etc/solvend
 sudo cp -r "$REPO/solvend/." /opt/solvend/
 sudo rm -rf /opt/solvend/__pycache__ /opt/solvend/skills
 sudo cp -r "$REPO/skills" /opt/solvend/skills
+# peaq reporting: the module plus the permanent identity inputs it reads.
+# Tests and docs stay in the repo.
+sudo mkdir -p /opt/solvend/peaq
+sudo cp "$REPO/peaq/machine.py" "$REPO/peaq/credential-subject.json" \
+        "$REPO/peaq/did-document.json" /opt/solvend/peaq/
 
 # The ledger is written by both the agent and the serial daemon, so it must be
 # owned by the login user. /opt/solvend stays root-owned and read-only to them.

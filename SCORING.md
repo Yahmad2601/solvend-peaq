@@ -94,8 +94,15 @@ Their own starter idea is *"Credit in motion."* Nearly everyone will simulate it
    two or three, not twenty.
 4. **Teammate submission path unverified.** He should open the listing and reach
    the submit form today.
-5. **Testnet vs mainnet** — ask @erti_peaq which they expect. Devnet cost us a
-   placement last time.
+5. **Testnet vs mainnet**: ask @erti_peaq which they expect. Devnet cost us a
+   placement last time. **Now more urgent (8 Oct):** the docs say
+   `agung-2026-08-28` has "no paired MCR" (`DEPLOYMENT_UNAVAILABLE`). If agung
+   has no Machine Credit Rating, the credit half of the pitch needs mainnet.
+   See `peaq/DOCS-ANSWERS.md`. **Verified from the SDK source: agung has no
+   MCR. Decision: `peaq-mainnet`.** Still worth confirming with peaq that
+   mainnet is fine for the submission.
+6. **@erti_peaq DMs need Telegram Premium.** Ask in a public peaq/hackathon
+   group with an @mention, or have the Germany teammate ask.
 
 ---
 

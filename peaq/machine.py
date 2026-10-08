@@ -103,16 +103,25 @@ def utc_day(epoch_secs):
 #       value is an ISO 4217 subunit int; float/Decimal/str/None -> TypeError.
 #       machine_id is an INT. MACHINE_ID above is a str from env: cast it.
 #   client.query_mcr(...) reads the credit rating. PEAQOS_MCR_API_URL defaults
-#       to http://127.0.0.1:8000. UNVERIFIED: real MCR API URL for agung.
+#       to http://127.0.0.1:8000. Only https://mcr.peaq.xyz is documented, and
+#       it is the peaq-mainnet host. UNVERIFIED: whether agung has an MCR at
+#       all (docs: agung-2026-08-28 -> DEPLOYMENT_UNAVAILABLE, "no paired MCR").
 #   EVENT_TYPE_REVENUE == 0, TRUST_SELF_REPORTED == 0
 #   SUPPORTED_CHAINS == {peaq:3338, ethereum:1, base:8453, polygon:137,
 #                        arbitrum:42161, optimism:10}   (no Solana, no agung)
-#       UNVERIFIED: which source_chain_id a Solana-settled event should carry.
+#   Solana-settled revenue: source_chain_id=0 (off-chain), source_tx_hash=None,
+#       trust_level=TRUST_SELF_REPORTED. Verified, DOCS-ANSWERS.md.
 #
-# Activate against Economics 2.0:
+# from_wallet config_kwargs (docs example): rpc_url, identity_registry,
+#   identity_staking, event_registry, machine_nft, did_registry,
+#   batch_precompile.
+# Activate against Economics 2.0 (kwarg verified from PeaqosClient.__init__):
 #   tokenomics20=Tokenomics20Config(deployment_id=DEPLOYMENT_ID)
-#   UNVERIFIED: how Tokenomics20Config is passed through from_wallet's
-#   **config_kwargs.
+#   deployment_id is one of "agung-2026-08-28" | "peaq-mainnet". Only
+#   peaq-mainnet carries an MCR api_base (https://mcr.peaq.xyz) in the SDK.
+#   ActivateMachineParams: machine_type + credential_subject bytes fix the
+#   PERMANENT machine ID. Choose them once, deliberately.
+#   Tokenomics-mode DID for query_mcr: "did:peaq:" + base-10 machine ID.
 # ---------------------------------------------------------------------------
 
 def _client():

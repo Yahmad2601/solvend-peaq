@@ -305,15 +305,369 @@ solvend --words 24` printed "Wallet created." with **no prompt**. So either the
 CLI read `OWS_PASSPHRASE` (docs wrong) or it created the wallet without a
 passphrase. Being tested; if it's the env var, it's a docs bug to file upstream.
 
+**Resolved 8 Oct 2026:** in a fresh SSH session with no `OWS_PASSPHRASE`,
+`peaqos wallet create scratch-test` **prompted** `Vault passphrase:` (then
+deleted). So the CLI prompts when the variable is unset and **silently uses
+`OWS_PASSPHRASE` when it is set**. `solvend` is protected with the passphrase
+entered via `read -rsp`. The docs saying `create` ignores `OWS_PASSPHRASE` is a
+**docs bug, file upstream**.
+
+## MCR API URL — only `https://mcr.peaq.xyz` is documented
+
+> "The docs only document `https://mcr.peaq.xyz` as the MCR API host — used
+> both as the general example/default fallback and specifically as the mainnet
+> (`peaq-mainnet`) deployment-record host. There's no separate agung-specific
+> MCR URL documented… The docs don't state a distinct agung testnet MCR
+> endpoint."
+
+*Verified 8 Oct 2026.*
+
+## `source_chain_id` for a Solana-settled event → `0`
+
+> "Per Events, `sourceChainId` must be one of the supported values: `0`,
+> `3338`, or `8453` — there's no Solana chain-ID entry. For a self-reported
+> revenue event (`trustLevel = 0`) where payment settled on Solana, you'd use
+> **`sourceChainId = 0`** (off-chain, since Solana isn't in the supported set),
+> with **`sourceTxHash` left null** — self-reported events don't require
+> `sourceTxHash` anyway (only mandatory at `trustLevel = 1`, and
+> `trustLevel = 1` would require a chain ID actually present in the supported
+> set, which Solana currently isn't)."
+
+Note: the Events docs list `0 / 3338 / 8453`, but the installed SDK's
+`SUPPORTED_CHAINS` also has 1, 137, 42161, 10, and no `0`. Small docs/SDK drift.
+
+*Verified 8 Oct 2026. Used in: `peaq/machine.py` `peaq_submit_revenue`.*
+
+## 🚨 agung deployment has no paired MCR
+
+> "Per Monetize: Opt-in, `deployment_id` for the monetization/MCR config only
+> accepts `"peaq-mainnet"` — **`"agung-2026-08-28"` raises
+> `TokenomicsConfigError` `DEPLOYMENT_UNAVAILABLE` (no paired MCR there).**"
+
+Not yet clear whether this blocks only the monetization opt-in, or activation
+and credit scoring on agung too. If agung has no MCR, **a machine on agung
+has no Machine Credit Rating**, and the credit display in scope needs mainnet.
+Being checked against the installed SDK source and asked of @erti_peaq.
+
+## `from_wallet` config kwargs (docs example, Python)
+
+```python
+client = PeaqosClient.from_wallet(
+    "my-machine", passphrase="s3cret",
+    rpc_url="https://peaq-rpc.example.com",
+    identity_registry="0x...", identity_staking="0x...",
+    event_registry="0x...", machine_nft="0x...",
+    did_registry="0x0000000000000000000000000000000000000800",
+    batch_precompile="0x0000000000000000000000000000000000000805",
+)
+```
+
+> "The docs don't show a Python example passing
+> `tokenomics20=Tokenomics20Config(deployment_id=...)` as a kwarg the way the JS
+> client does (`tokenomics20: { deploymentId: "peaq-mainnet" }`)."
+
+→ The Python kwarg name is **UNVERIFIED**. Read it from the installed
+`PeaqosClient.__init__` / config class.
+
+*Verified 8 Oct 2026.*
+
+## Installed SDK source: deployments and MCR (read on the Pi, 8 Oct 2026)
+
+From `inspect` and `grep` over `.peaq/lib/python3.13/site-packages/peaq_os_sdk`:
+
+- `tokenomics/deployments.py:28`: `Tokenomics20DeploymentId =
+  Literal["agung-2026-08-28", "peaq-mainnet", "peaq-mainnet-michael"]`.
+  `peaq-mainnet-michael` is an `audience="internal"` record; don't use it.
+- `agung-2026-08-28` → `chain_id=9990`, record source
+  `agung-2026-08-28T15-20-37-404Z.md`. **It exists and activation is
+  supported.**
+- `peaq-mainnet` → `api_base="https://mcr.peaq.xyz"` (line 137). The grep for
+  `mcr.peaq` matched **only** under `peaq-mainnet`.
+- `query_mcr` docstring: raises `TokenomicsConfigError` "**If Tokenomics mode is
+  selected but the deployment has no approved MCR endpoint.**"
+  `query/_internal/mcr_base_url.py:44` raises `DEPLOYMENT_UNAVAILABLE`.
+- ✅ **VERIFIED 8 Oct 2026: agung has no MCR.** Printed
+  `TOKENOMICS_2_0_DEPLOYMENTS` (`deployments.py` lines 80–140). The
+  `peaq-mainnet` record carries `monetization=Tokenomics20MonetizationDeployment(
+  api_base="https://mcr.peaq.xyz", api_version="tokenomics-2.0-monetization-v1")`.
+  The `agung-2026-08-28` record has **no `monetization` field at all**. Both
+  are `status="available"`. Mainnet `event_start_block=11_446_416`. Contract
+  addresses for both live in the SDK snapshot, so we never type them.
+  → **A credit rating requires `peaq-mainnet`.** Decision: activate on mainnet.
+- `PeaqosClient.__init__(*, rpc_url, private_key=None, identity_registry,
+  identity_staking, event_registry, machine_nft, did_registry,
+  batch_precompile, machine_account_factory=None, machine_nft_adapter=None,
+  api_url='http://127.0.0.1:8000', operational_limits=None,
+  orchestration_url=None, api_key=None, verbose=False,
+  tokenomics20: Tokenomics20Config | None = None, _ows_account=None)`.
+  **The Python kwarg is `tokenomics20=`.** The six legacy addresses have no
+  default, so they are still required.
+- `Tokenomics20Config(deployment_id: str, creation_home: Literal['peaq',
+  'solana'] = 'peaq', solana_rpc_url=None)`. "Contract addresses are
+  deliberately not accepted here. They come from the SDK's approved deployment
+  snapshot." "Supplying this puts the client in **Tokenomics mode**, which
+  enables activation and disables the integrations that cannot carry a
+  Tokenomics 2.0 machine ID."
+- `ActivateMachineParams(controller, verification_methods:
+  tuple[VerificationMethodInput, ...], authentication: tuple[int, ...],
+  service_endpoints: tuple[ServiceEndpointInput, ...], machine_type: str,
+  credential_subject: bytes, manufacturer: Address, tier: SubscriptionTier,
+  expected_machine_id=None, max_net_peaq_amount=None, confirmations=1,
+  timeout_seconds=120.0, cancel=None, on_transaction_submitted=None)`.
+  "The signer becomes the machine's owner and pays the bond."
+  **"`machine_type` and the exact `credential_subject` bytes alone determine
+  the permanent machine ID, so neither can change after activation."**
+- `preview_machine_activation(params)` → `ActivationPreview`, "without signing
+  or writing". `max_net_peaq_amount` caps what activation may spend.
+- `fund_from_gas_station(owner_address, target_wallet_address, chain_id,
+  two_factor_code, faucet_base_url, request_id=None)` → `FundedResponse`
+  (`tx_hash`, `funded_amount`) or `SkippedResponse` (`current_balance`,
+  `min_gas_balance`). `chain_id` defaults to `"peaq"`. Docstring example
+  `owner_address="5GrwvaEF..."` is a Substrate SS58 address.
+- `query_mcr(did)` → `MCRResponse` (`mcr_score`, `mcr`). In Tokenomics mode
+  the DID is `did:peaq:` + the **base-10 machine ID**.
+- There is also a read-only `PeaqosQueryClient(deployment_id="peaq-mainnet")`.
+
+## Docs assistant answers, 8 Oct 2026
+
+- **activate_machine on agung:** the assistant called `activate_machine`,
+  `Tokenomics20Config`, `deployment_id` and `DEPLOYMENT_UNAVAILABLE`
+  "fabricated identifiers" not in the docs. **All four exist in the installed
+  SDK 0.11.0** (see above). So the docs don't cover the Python Tokenomics 2.0
+  surface. That's a **docs gap, file upstream**. Treat the installed source as
+  the authority for this.
+- **`GET /mcr/{did}`:** the docs don't mention a mainnet/testnet restriction.
+  The SDK source does gate it per deployment, as above.
+- **Gas Station networks:** "funds peaq wallets only". `chain_id` is simply
+  `"peaq"`, with no mainnet/agung distinction documented. Whether it funds
+  mainnet is still unknown.
+- **Mainnet:** EVM RPC `https://quicknode1.peaq.xyz` (fallbacks
+  `quicknode2/3.peaq.xyz`, `https://peaq.api.onfinality.io/public`,
+  `https://peaq-rpc.publicnode.com`), chain ID **3338**. Entry bond **$0.02
+  per 365-day period**, paid in PEAQ at the oracle rate at activation time.
+
+## Getting PEAQ on mainnet (8 Oct 2026)
+
+> "Gas Station: Yes, it funds machine wallets on peaq chain generally — 'Gas
+> Station funds peaq wallets only,' with `chainId: "peaq"`… No explicit
+> mainnet-only restriction is called out."
+> "Standard wallet transfer: since peaq is EVM-compatible, any 0x address can
+> simply receive PEAQ sent from another EVM wallet/exchange." Also Substrate →
+> EVM via the Address Converter (EVM Token Transfer page).
+> "For machine wallets specifically, Gas Station is the supported bootstrap
+> mechanism."
+
+→ Plan: try the Gas Station on mainnet first (it fires inside a real
+activation). Buying PEAQ is the fallback.
+
+## USDT activation: not usable on mainnet
+
+> "`activate_machine_with_usdt` and `preview_machine_activation_with_usdt`
+> settle the activation bond in USDT through the
+> `SubscriptionTokenProvisionPool`… However, per SDK: Python: **this is not
+> usable on peaq mainnet** — the pool has no USDT token configured there, so
+> both the USDT quote and the write call revert… on mainnet, you still need
+> PEAQ."
+
+→ The 4 USDC on Solana doesn't help directly.
+
+## Tokenomics 1.0 addresses, peaq mainnet
+
+The docs assistant returned all four (IdentityRegistry, IdentityStaking,
+EventRegistry, MachineNFT) with their env var names, from the **peaqOS Smart
+Contracts** page. **Deliberately not transcribed here from a screenshot.** Copy
+them from that page straight into the Pi's env file, then check each one with
+`eth_getCode` (it must be non-empty) before use.
+
+## @erti_peaq: can't DM
+
+Telegram blocks DMs to @erti_peaq without Premium (8 Oct 2026). Reach them
+another way (see SCORING.md questions).
+
+## Gas Station owner = the machine wallet itself
+
+> "The real docs example uses `owner_address="0xOwner..."`, an EVM-style
+> address, not an SS58 Substrate address… the examples use `client.address`…
+> There's no documented requirement that `owner_address` be a separate
+> Substrate account; it can be the same address used elsewhere by the client,
+> including a machine wallet's own EVM address, as long as it's 2FA-enrolled
+> via `setup_faucet_2fa` / `confirm_faucet_2fa`."
+
+→ The `solvend` wallet enrolls itself. (The SS58 in the SDK docstring is just
+an old example. Minor docs inconsistency.)
+
+*Verified 8 Oct 2026.*
+
+## CLI surface, `peaqos --help` / `activate --help` (CLI 0.0.15, on the Pi)
+
+Commands: `activate`, `init` ("Write a .env configuration file"), `machine`,
+`monetize` ("machine monetisation through the MCR"), `qualify` ("Qualify
+machine data for credit rating and verification"), `scale`, `show`, `stream`,
+`verify`, `wallet`, `whoami` ("Show the active wallet identity and loaded
+configuration").
+
+**No global network/RPC flag.** The network comes from config/env.
+`PEAQOS_OWS_WALLET` selects the default OWS wallet.
+
+`peaqos activate` (EVM/peaq path):
+- `--machine-type TEXT`: "Identity domain for the machine."
+- `--credential-subject-hex TEXT`: "0x-prefixed identity-anchor bytes. Together
+  with `--machine-type` these fix the permanent machine ID and cannot be
+  changed afterwards."
+- `--manufacturer TEXT`: "EVM hex or Solana public key (recorded, never verified)."
+- `--tier [ENTRY|BASIC|PRO|0-7]`
+- `--did-document TEXT`: path to UTF-8 JSON with `verificationMethods`,
+  `authentication`, `serviceEndpoints`.
+- `--for` / `--machine-key`: machine-key mode (the machine EOA signs from a raw
+  key file). **Not used**: our signer is already the machine's own OWS wallet.
+- `--skip-funding`: skip balance check, 2FA enrollment and Gas Station.
+- `--payment [peaq|usdt]` (default `peaq`). `--slippage-bps` is rejected for PEAQ.
+- `--dry-run` ("Preview only; submit nothing"), `--json`, `-y/--yes`.
+- Everything else (`--chain solana`, `--phase`, `--solana-owner`,
+  `--operator-wallet`, `--pay-in`, lamport ceilings…) is Solana-home only.
+  Interesting detail: Solana operator registration costs "about 0.01 PEAQ".
+
+*Verified from `--help` on the Pi, 8 Oct 2026.*
+
+`peaqos init`: interactive by default ("prompts for network and private key
+source (paste, generate, or create an OWS wallet), then connection URLs,
+orchestration settings, and the EventRegistry contract address. Writes a
+`.env` file in the current directory and runs `whoami` to verify"). Choosing
+`wallet` writes `PEAQOS_OWS_WALLET` instead of `PEAQOS_PRIVATE_KEY`.
+`--non-interactive` reads env vars, "falling back to network defaults where
+available". `--force` overwrites. **There's no "use existing wallet" option**,
+so we write `.env` by hand rather than risk a second wallet.
+
+`peaqos whoami` with `PEAQOS_OWS_WALLET=solvend` and no `.env`: prompted
+"Vault passphrase for wallet 'solvend':", then `Error: Missing required env
+var: PEAQOS_RPC_URL`. So the CLI reads `PEAQOS_OWS_WALLET` and needs
+`PEAQOS_RPC_URL` from env or `./.env`.
+
+*Verified on the Pi, 8 Oct 2026.*
+
+## Mainnet config: verified on the Pi (8 Oct 2026)
+
+The `.env` was written by heredoc, and the four Tokenomics 1.0 addresses were
+pasted from the peaqOS Smart Contracts page. Checked with `eth_getCode` against
+`https://quicknode1.peaq.xyz`: `eth_chainId` = **3338**. IdentityRegistry,
+IdentityStaking, EventRegistry and MachineNFT each have **170 code bytes**
+(the same size for all four, consistent with proxies). The DID (`0x…0800`) and
+batch (`0x…0805`) precompiles return 0 bytes, as expected for precompiles.
+
+`peaqos whoami` loads it: address `0x6090…2996`, chain 3338, MCR API
+`https://mcr.peaq.xyz`, Tokenomics 2.0 deployment `peaq-mainnet` (InfoDesk
+`0x6C74…6A82`, …), "resolved from the SDK's deployment record, not from your
+.env… **verified against InfoDesk on-chain before any write**."
+`Network : unknown`: probably cosmetic, watch it in the dry run.
+
+**The CLI sends telemetry.** whoami printed `[PostHog] analytics lane flush ran
+out of budget`. UNVERIFIED: what it sends and how to opt out.
+
+## First mainnet dry run (8 Oct 2026)
+
+```
+peaqos activate --machine-type VendingMachine --credential-subject-hex "$CS" \
+  --tier entry --manufacturer "$MFR" --did-document peaq/did-document.json \
+  --dry-run --json
+```
+
+- `--tier` must be **lowercase**. `--help` shows `[ENTRY|BASIC|PRO|0-7]`, but
+  `ENTRY` is rejected: "'ENTRY' is not one of 'entry', 'basic', 'pro'".
+  **CLI help/validator mismatch, file upstream.**
+- `--manufacturer` and `--did-document` are **required** for EVM activation.
+- A DID document of `{"verificationMethods": [], "authentication": [],
+  "serviceEndpoints": []}` passes validation.
+- Steps shown: `[1/4] Compute machine identity`, `[2/4] Reconcile previous
+  submissions`, `[3/4] Quote the activation`. Result: `status: error`,
+  `error_code: INSUFFICIENT_PEAQ`, `mode: self-owned`, owner = controller =
+  manufacturer = `0x6090…2996`, `peaq_token` = the `0x…0809` precompile,
+  `voucher_credit: 0`, `approval_required: true`.
+- **Bond 0.4891 PEAQ + 0.0500 PEAQ gas headroom = 0.5391 PEAQ needed.** That's
+  Entry tier at $0.02/yr, so PEAQ ≈ $0.04 at quote time.
+- `machine_id` is a 76-digit decimal. **Not transcribed here.** The authoritative
+  copy is `peaq/activation-preview.json`, saved straight from the CLI.
+
+## DID document schema (installed SDK + docs, 8 Oct 2026)
+
+- `VerificationMethodInput(id, method_type, controller, public_key_multibase)`,
+  e.g. `id="#key-1"`. "`controller`: Entity controlling this key. May differ
+  from the DID document's own controller."
+- `ServiceEndpointInput(id: str, service_type: str, service_endpoint: str)`,
+  e.g. `id="#telemetry"`, `service_type="TelemetryService"`.
+- CLI parser: `peaq_os_cli/commands/activation/did_input.py`.
+- Docs assistant, JSON file keys: verificationMethods entries `id`,
+  `methodType`, `controller`, `publicKeyMultibase`. serviceEndpoints entries
+  `id`, `serviceType`, `serviceEndpoint`. "`authentication`: a list of integer
+  indexes into the `verificationMethods` array".
+- Docs assistant, EVM signer: "`EcdsaSecp256k1RecoveryMethod2020` is the
+  required type for EVM wallets… for EVM, the verification method uses the
+  account address itself… `publicKeyMultibase` is 'N/A' for EVM." The SDK
+  dataclass still has a `public_key_multibase` field, so whether the CLI
+  accepts it missing is UNVERIFIED until `did_input.py` is read.
+- Verification methods and service endpoints are **editable after
+  activation** (`set_machine_verification_methods`,
+  `set_machine_service_endpoints`). Only `machine_type` + `credential_subject`
+  are permanent.
+
+## Gas Station covers gas only, not the bond
+
+> "Only gas, not the bond. Per Onboarding Quickstart: 'Copy the `0x…` address
+> and send PEAQ to it: **the bond plus at least 0.5 PEAQ**. Below 0.5 PEAQ a
+> real `peaqos activate` run stops to fund the wallet for you through the Gas
+> Station… Staying above 0.5 PEAQ avoids it.'" "The bond itself must be sent
+> to the wallet separately before activation; if it's missing, activation
+> fails with `INSUFFICIENT_PEAQ`."
+
+→ **We have to acquire PEAQ.** Target: bond (~0.49) + 0.5 buffer + headroom
+for daily `submit_event` gas ≈ **1.5–2 PEAQ** (about $0.06–0.08 at quote).
+
+*Verified 8 Oct 2026.*
+
+## CLI DID parser (`peaq_os_cli/commands/activation/did_input.py`, read on the Pi)
+
+- Root: exactly `verificationMethods`, `authentication`, `serviceEndpoints`.
+  "All three required, nothing else permitted." `id` and `controller` at the
+  root are **explicitly rejected**. The CLI sets the controller from the
+  activation mode (self-owned → the signer).
+- Each verification method needs exactly `id`, `methodType`, `controller` (must
+  match a 0x 40-hex EVM address), and **`publicKeyMultibase` (required
+  string)**. So the docs' "publicKeyMultibase is N/A for EVM" does not match
+  the CLI. **Docs/CLI mismatch, file upstream.**
+- Each service endpoint needs exactly `id`, `serviceType`, `serviceEndpoint`,
+  non-empty on the EVM path.
+- `authentication` entries must be JSON integers in range. If
+  `verificationMethods` is empty, `authentication` must be empty too.
+- Duplicate JSON keys are rejected, so a repeat can't silently pick what goes
+  on-chain.
+
+→ Decision: activate with **no verification method** and one service
+endpoint (`#source` → the GitHub repo). Add a proper secp256k1 key later with
+`set_machine_verification_methods` once its `publicKeyMultibase` encoding is
+verified. That's editable, so it doesn't block activation.
+
+## Second dry run (8 Oct 2026)
+
+Output saved to `peaq/activation-preview.json`. `machine_id`
+`8600820691859294852796023821329786994502637838982221572620760063908348418155`
+(copied from CLI text output, matches the file). `net_peaq_amount`
+`492112543185951367` wei = **0.4921 PEAQ**. The bond moves with the PEAQ price
+(was 0.4891 an hour earlier).
+
 ## Still to ask
 
-- [ ] What is `PEAQOS_MCR_API_URL` for agung? (SDK default is
-      `http://127.0.0.1:8000`, so `query_mcr` fails without it.)
-- [ ] What `source_chain_id` should a self-reported revenue event carry when
-      the payment settled on Solana? (`SUPPORTED_CHAINS` has no Solana.)
-- [ ] How is `Tokenomics20Config(deployment_id=...)` passed to
-      `PeaqosClient.from_wallet(**config_kwargs)`, and which `config_kwargs`
-      are required (rpc_url, contract addresses)?
+- [ ] For an EVM (secp256k1) verification method in a peaqOS DID document, what
+      exact `methodType` and `publicKeyMultibase` encoding does the CLI expect,
+      given `did_input.py` requires `publicKeyMultibase` as a string?
+- [ ] Supported route to move PEAQ from Solana (the PEAQ OFT) or an exchange to
+      a peaq mainnet EVM `0x` address.
+- [ ] What does the peaqOS CLI/SDK send to PostHog, and which env var disables
+      it? (Seen in `peaqos whoami`, CLI 0.0.15.)
+- [ ] `peaqos whoami` shows `Network : unknown` with `PEAQOS_RPC_URL` set to
+      mainnet. Which env var sets it, and does activation or the Gas Station
+      depend on it?
+- [ ] Is `--did-document` required for an EVM activation, or does the CLI
+      default to empty `verificationMethods` / `authentication` /
+      `serviceEndpoints`? (The dry run will show this.)
 
 - [ ] What are the exact agung Tokenomics 1.0 contract addresses? *(copy from
       the "peaqOS Smart Contracts" page rather than transcribing)*

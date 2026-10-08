@@ -55,6 +55,12 @@ peaq-os-cli 0.0.15 (peaq_os_sdk 0.11.0)
 All native deps installed as prebuilt `aarch64` wheels; no compilation.
 Screenshot: `...` *(save into the repo and link here)*
 
+**Machine identity: preview (dry run, 8 Oct 2026, peaq mainnet)**
+- machine_type `VendingMachine`, credential subject `peaq/credential-subject.json`
+  (canonical JSON, includes sha256 of the Pi's hardware serial)
+- Predicted machine ID: see `peaq/activation-preview.json` (`machine_id`)
+- Bond quote: 0.4921 PEAQ (Entry tier, $0.02/yr)
+
 **Machine identity**
 - DID: `...`
 - Activation tx: `...`

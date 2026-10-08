@@ -16,6 +16,10 @@ invoice.seq
 devnet.db
 __pycache__/
 *.pyc
+# peaq SDK virtualenv on the Pi (~/solvend-peaq/.peaq)
+.peaq/
+# peaqOS CLI audit log, written to the working directory
+peaqos.log
 *.png
 
 # Editor / OS

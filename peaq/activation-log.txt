@@ -1,0 +1,52 @@
+Script started on 2026-10-08 16:44:34+01:00 [COMMAND="python3 peaq/machine.py --activate" TERM="xterm-256color" TTY="/dev/pts/1" COLUMNS="156" LINES="41"]
+[1/3] Balance check
+  Signer 0x6090...2996: 19.9960 PEAQ (sufficient)
+[1/4] Compute machine identity
+[2/4] Reconcile previous submissions
+[3/4] Quote the activation
+  Status:               preview
+  Flow:                 self-owned
+  Deployment:           peaq-mainnet
+  Chain ID:             3338
+  MachineStateAndSync:  0xcD1917FB2a56459AcA34FDD118e08776dE0890f2
+  Machine ID:           8600820691859294852796023821329786994502637838982221572620760063908348418155
+  Machine type:         VendingMachine
+  Manufacturer:         0x60901F3fC014Eb097411720f55f247a5E6652996
+  Tier:                 entry
+  Owner / payer:        0x60901F3fC014Eb097411720f55f247a5E6652996
+  DID controller:       0x60901F3fC014Eb097411720f55f247a5E6652996
+  PEAQ token:           0x0000000000000000000000000000000000000809
+  Bond:                 0.4952 PEAQ
+  Voucher credit:       0.0000 PEAQ
+  Net PEAQ:             0.4952 PEAQ
+  Signer balance:       19.9960 PEAQ
+  Approval required:    yes
+
+This spends PEAQ from the activation signer and mints a machine identity that cannot be changed afterwards: the machine ID is derived from --machine-type and --credential-subject-hex alone.
+
+Activate this machine? [y/N]: y
+[4/4] Activate machine
+  Status:               activated
+  Flow:                 self-owned
+  Deployment:           peaq-mainnet
+  Chain ID:             3338
+  MachineStateAndSync:  0xcD1917FB2a56459AcA34FDD118e08776dE0890f2
+  Machine ID:           8600820691859294852796023821329786994502637838982221572620760063908348418155
+  Machine type:         VendingMachine
+  Manufacturer:         0x60901F3fC014Eb097411720f55f247a5E6652996
+  Tier:                 entry
+  Owner / payer:        0x60901F3fC014Eb097411720f55f247a5E6652996
+  DID controller:       0x60901F3fC014Eb097411720f55f247a5E6652996
+  Bond:                 0.4952 PEAQ
+  Voucher credit:       0.0000 PEAQ
+  Net PEAQ:             0.4952 PEAQ
+  Transaction:          0xdeab1fed124579378f9558e55861772729ec37ac4b99841cd65e53865ed50b77
+  Period start:         1791474378
+  Period end:           1823010378
+  Homed locally:        yes
+{
+  "activate": "submitted",
+  "exit_code": 0
+}
+
+Script done on 2026-10-08 16:46:21+01:00 [COMMAND_EXIT_CODE="0"]

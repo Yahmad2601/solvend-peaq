@@ -12,7 +12,7 @@ on evidence, not engineering — the machine did more than the repo could prove.
 | # | Claim | Evidence needed | Captured |
 |---|---|---|---|
 | 1 | It is real hardware, not a simulation | `cat /proc/device-tree/model` output + photo/video of the machine | ☐ |
-| 2 | The machine has a peaq identity | DID string + explorer link to the `activateMachine` tx | ☐ |
+| 2 | The machine has a peaq identity | DID string + explorer link to the `activateMachine` tx | ☑ 8 Oct (screenshots pending) |
 | 3 | Revenue events are real sales | ≥3 settlements, each with an explorer link, matched to its ledger row | ☐ |
 | 4 | The credit rating moves | Before/after screenshots of the score with timestamps | ☐ |
 | 5 | Reporting is autonomous | Log excerpt: settlement → `submitEvent` with no human action between | ☐ |
@@ -71,9 +71,19 @@ Tests on the Pi (Python 3.13): `peaq/test_machine.py` 22 passed, 0 failed ·
 - Predicted machine ID: see `peaq/activation-preview.json` (`machine_id`)
 - Bond quote: 0.4921 PEAQ (Entry tier, $0.02/yr)
 
-**Machine identity**
-- DID: `...`
-- Activation tx: `...`
+**Machine identity: activated on peaq mainnet, 8 Oct 2026** (claim 2 ✅)
+- DID: `did:peaq:8600820691859294852796023821329786994502637838982221572620760063908348418155`
+- Activation tx: [`0xdeab1fed124579378f9558e55861772729ec37ac4b99841cd65e53865ed50b77`](https://peaq.subscan.io/tx/0xdeab1fed124579378f9558e55861772729ec37ac4b99841cd65e53865ed50b77)
+  (Subscan: Confirmed / Success. 0.495 PEAQ bond to MachineSubscription
+  `0x9e37…c43895`. MREG identity NFT `860082…418155` minted to the owner. Fee
+  0.1024566 PEAQ.)
+- Full CLI session: `peaq/activation-log.txt` (recorded with `script`, from
+  `machine.py --activate`). Machine type `VendingMachine`, tier `entry`,
+  self-owned, homed on peaq. Subscription period 1791474378 → 1823010378
+  (365 days).
+- Funding: ~20 PEAQ bridged Solana → peaq via Stargate (official route per the
+  peaq DeFi guide). Wallet balance before activation: 19.996 PEAQ.
+- Screenshots: Subscan tx page `...`, `/machine` showing Provisioned `...`
 - Owner address: `0x60901F3fC014Eb097411720f55f247a5E6652996` (OWS wallet
   `solvend`, generated on the Pi 7 Oct 2026, key never left the device)
 

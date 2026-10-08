@@ -89,6 +89,26 @@ not in that table.**
 
 *Verified 6 Oct 2026.*
 
+**Public MCR API, details (docs get-mcr page, fetched 8 Oct 2026):**
+`GET https://mcr.peaq.xyz/mcr/{did}`, **no API key**. The DID must be
+`did:peaq:<decimal machine id>` with no leading zeros. Address DIDs, raw
+addresses and bare IDs return 400. Response fields: `did`, `machine_id`
+(decimal string), `mcr_score` (0–100, 0 for Provisioned/NR), `mcr` (`AAA`…`B`,
+`NR`, `Provisioned`), `mcr_degraded`, `bond_status` (`bonded`/`unbonded`),
+`negative_flag`, `event_count`, `revenue_event_count`, `activity_event_count`,
+`revenue_trend` (`up`/`stable`/`down`/`insufficient`), `total_revenue` (USD
+cents), `average_revenue_per_event`, `last_updated`, plus `home_chain` /
+`rating_unavailable` for Solana-homed machines. A fresh peaq-homed machine
+reads `Provisioned`, score 0, trend `insufficient`.
+
+**Observed live, 8 Oct 2026:**
+- Our predicted machine before activation: `404 {"detail":"Machine not
+  registered"}`.
+- **Python's default `Python-urllib` User-Agent gets `403 Forbidden`.** curl,
+  and urllib with a custom User-Agent, get the real answer. Probably a WAF
+  rule. Worth reporting upstream, since a stock Python client fails with a
+  misleading 403. `tools/machine_display.py` sends `SolVend-display/1.0`.
+
 ## Solana support — paused *(SUPERSEDED for CLI 0.0.15 / SDK 0.11.0 — see below)*
 
 > "`[solana]` extra enables `peaqos activate --chain solana`,

@@ -1,0 +1,23 @@
+[Unit]
+Description=SolVend shop bot (Telegram buttons -> invoice -> wallet pay link)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# `pi` = your normal login user, same as solvend-serial.service.
+User=pi
+EnvironmentFile=/etc/solvend/env
+ExecStart=/usr/bin/python3 /opt/solvend/shop_bot.py run
+Restart=always
+RestartSec=5
+
+# It talks to Telegram and writes invoices to the ledger. Nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/solvend
+
+[Install]
+WantedBy=multi-user.target

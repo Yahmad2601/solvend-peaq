@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SolVend Checkout</title>
+<!--
+  SolVend checkout. Opened from the shop bot's "Pay with Phantom / Solflare"
+  buttons, which are wallet "browse" universal links, so this page runs INSIDE
+  the wallet's in-app browser with the wallet provider injected.
+
+  It builds one SPL USDC transferChecked to the merchant, with the invoice's
+  Solana Pay reference attached as a read-only key, and asks the wallet to sign.
+
+  Trust model: the merchant address and the USDC mint are constants in this
+  file, never URL parameters, so a tampered link cannot redirect a payment.
+  The amount and reference do come from the link; the machine still verifies
+  the merchant's on-chain balance delta, so an edited amount simply never
+  settles. Nothing here is trusted by the machine.
+-->
+<script src="https://unpkg.com/@solana/web3.js@1.99.0/lib/index.iife.min.js"
+        integrity="sha384-DjHoHg45N+L5RZPO5p+uK874TyHExfoonwFDUKKpozAERZGg+SY8y+ntxvWd672b"
+        crossorigin="anonymous"></script>
+<style>
+  :root { --bg:#f6f6f4; --fg:#161616; --muted:#666; --card:#fff; --line:#ddd;
+          --accent:#1d7f4e; --err:#b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#111; --fg:#eee; --muted:#999;
+      --card:#1b1b1b; --line:#333; --accent:#5fd18f; --err:#ff8a80; } }
+  :root[data-theme="dark"] { --bg:#111; --fg:#eee; --muted:#999; --card:#1b1b1b;
+      --line:#333; --accent:#5fd18f; --err:#ff8a80; }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:16px/1.45 system-ui,-apple-system,sans-serif; padding:24px 16px; }
+  main { max-width:420px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:22px; }
+  h1 { font-size:20px; margin:0 0 4px }
+  .muted { color:var(--muted); font-size:14px }
+  .amount { font-size:40px; font-weight:700; margin:16px 0 4px }
+  .row { display:flex; justify-content:space-between; gap:12px; font-size:14px;
+         padding:6px 0; border-top:1px solid var(--line) }
+  .row span:last-child { text-align:right; word-break:break-all }
+  button, a.btn { display:block; width:100%; margin-top:18px; padding:14px;
+         border:0; border-radius:10px; background:var(--accent); color:#fff;
+         font-size:17px; font-weight:600; text-align:center; text-decoration:none;
+         cursor:pointer }
+  button[disabled] { opacity:.5; cursor:default }
+  a.btn.alt { background:transparent; color:var(--fg); border:1px solid var(--line) }
+  #status { margin-top:16px; font-size:15px; min-height:1.5em; word-break:break-word }
+  .ok { color:var(--accent) } .err { color:var(--err) }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>SolVend</h1>
+    <div class="muted">Vending machine checkout · USDC on Solana</div>
+    <div class="amount" id="amount">–</div>
+    <div class="row"><span>Item</span><span id="item">–</span></div>
+    <div class="row"><span>Order</span><span id="invoice">–</span></div>
+    <div class="row"><span>Pay to</span><span id="merchant"></span></div>
+    <div id="actions"></div>
+    <div id="status"></div>
+  </div>
+  <p class="muted">Your 4-digit code arrives in the Telegram chat about a minute
+  after payment. Type it on the machine's keypad. Pay within 30 minutes of
+  ordering, or the order closes.</p>
+</main>
+
+<script>
+"use strict";
+// ---- Constants: deliberately NOT taken from the URL ------------------------
+const MERCHANT   = "4QBmNWkWCdTXKrHjJnbZVbKCCctdJRk5RZsB49F7P8yP";
+const USDC_MINT  = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";   // mainnet USDC
+const DECIMALS   = 6;
+const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const ATA_PROGRAM   = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+// Public endpoints, tried in order (blockhash + account checks only).
+const RPCS = ["https://api.mainnet-beta.solana.com",
+              "https://solana-rpc.publicnode.com"];
+
+const $ = (id) => document.getElementById(id);
+const say = (msg, cls) => { $("status").className = cls || ""; $("status").textContent = msg; };
+const W = window.solanaWeb3;
+
+// ---- Read and validate the order from the link ------------------------------
+const q = new URLSearchParams(location.search);
+const order = { invoice: q.get("invoice") || "", item: q.get("item") || "",
+                amount: q.get("amount") || "", reference: q.get("reference") || "" };
+
+function baseUnits(s) {               // "1.5" -> 1500000n, no floats
+  if (!/^\d{1,6}(\.\d{1,6})?$/.test(s)) return null;
+  const [w, f = ""] = s.split(".");
+  return BigInt(w) * 10n ** BigInt(DECIMALS) + BigInt((f + "000000").slice(0, DECIMALS));
+}
+function validKey(s) { try { return new W.PublicKey(s).toBase58() === s; } catch { return false; } }
+
+const units = baseUnits(order.amount);
+const orderOk = W && units && units > 0n && validKey(order.reference)
+                && /^INV-\d{4,}$/.test(order.invoice) && /^[a-z]{1,20}$/.test(order.item);
+
+$("merchant").textContent = MERCHANT.slice(0, 4) + "…" + MERCHANT.slice(-4);
+if (orderOk) {
+  $("amount").textContent = order.amount + " USDC";
+  $("item").textContent = order.item;
+  $("invoice").textContent = order.invoice;
+}
+
+// ---- Wallet ----------------------------------------------------------------
+function provider() {
+  if (window.phantom && window.phantom.solana && window.phantom.solana.isPhantom) return window.phantom.solana;
+  if (window.solflare && window.solflare.isSolflare) return window.solflare;
+  if (window.solana) return window.solana;
+  return null;
+}
+
+function openInWalletLinks() {
+  const here = encodeURIComponent(location.href);
+  const ref = encodeURIComponent(location.origin);
+  $("actions").innerHTML =
+    `<a class="btn" href="https://phantom.com/ul/browse/${here}?ref=${ref}">Open in Phantom</a>` +
+    `<a class="btn alt" href="https://solflare.com/ul/v1/browse/${here}?ref=${ref}">Open in Solflare</a>`;
+}
+
+async function rpcConnection() {
+  let lastErr;
+  for (const url of RPCS) {
+    try {
+      const c = new W.Connection(url, "confirmed");
+      await c.getLatestBlockhash("confirmed");
+      return c;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error("no RPC reachable");
+}
+
+function ata(owner, mint) {
+  return W.PublicKey.findProgramAddressSync(
+    [owner.toBytes(), new W.PublicKey(TOKEN_PROGRAM).toBytes(), mint.toBytes()],
+    new W.PublicKey(ATA_PROGRAM))[0];
+}
+
+function transferChecked(src, mint, dst, owner, amount, reference) {
+  const data = new Uint8Array(10);
+  data[0] = 12;                                  // SPL Token: TransferChecked
+  let a = amount;
+  for (let i = 0; i < 8; i++) { data[1 + i] = Number(a & 0xffn); a >>= 8n; }
+  data[9] = DECIMALS;
+  return new W.TransactionInstruction({
+    programId: new W.PublicKey(TOKEN_PROGRAM),
+    keys: [
+      { pubkey: src,   isSigner: false, isWritable: true },
+      { pubkey: mint,  isSigner: false, isWritable: false },
+      { pubkey: dst,   isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: true,  isWritable: false },
+      // Solana Pay reference: read-only, lets the machine find this payment.
+      { pubkey: reference, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
+}
+
+async function pay() {
+  const btn = $("pay");
+  btn.disabled = true;
+  try {
+    const wallet = provider();
+    say("Connecting to your wallet…");
+    const res = await wallet.connect();
+    const buyer = (res && res.publicKey) || wallet.publicKey;
+    const mint = new W.PublicKey(USDC_MINT);
+    const merchant = new W.PublicKey(MERCHANT);
+    if (buyer.equals(merchant)) throw new Error("This is the shop's own wallet. Pay from a different wallet.");
+
+    say("Checking your USDC balance…");
+    const conn = await rpcConnection();
+    const src = ata(buyer, mint), dst = ata(merchant, mint);
+    const bal = await conn.getTokenAccountBalance(src).catch(() => null);
+    if (!bal) throw new Error("This wallet has no USDC account on Solana mainnet.");
+    if (BigInt(bal.value.amount) < units) throw new Error(`Not enough USDC: you have ${bal.value.uiAmountString}, need ${order.amount}.`);
+
+    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+    const tx = new W.Transaction({ feePayer: buyer, blockhash, lastValidBlockHeight });
+    tx.add(transferChecked(src, mint, dst, buyer, units, new W.PublicKey(order.reference)));
+
+    say("Approve the payment in your wallet…");
+    let signature;
+    if (wallet.signAndSendTransaction) {
+      const out = await wallet.signAndSendTransaction(tx);
+      signature = out.signature || out;
+    } else {
+      const signed = await wallet.signTransaction(tx);
+      signature = await conn.sendRawTransaction(signed.serialize());
+    }
+    say("Sent. Waiting for the network to confirm…");
+    await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed").catch(() => {});
+    say("Paid ✓  Your 4-digit code will arrive in Telegram within about a minute.", "ok");
+    $("actions").innerHTML =
+      `<a class="btn alt" href="https://solscan.io/tx/${encodeURIComponent(signature)}">View on Solscan</a>`;
+  } catch (e) {
+    btn.disabled = false;
+    say((e && e.message) ? e.message : String(e), "err");
+  }
+}
+
+if (!W) {
+  say("Could not load the Solana library. Check your connection and reload.", "err");
+} else if (!orderOk) {
+  say("This payment link is incomplete. Order again from the SolVend chat.", "err");
+} else if (!provider()) {
+  say("Open this page in your Solana wallet to pay.");
+  openInWalletLinks();
+} else {
+  $("actions").innerHTML = `<button id="pay">Pay ${order.amount} USDC</button>`;
+  $("pay").addEventListener("click", pay);
+}
+</script>
+</body>
+</html>

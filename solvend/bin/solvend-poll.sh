@@ -53,8 +53,15 @@ for p in d.get("newly_paid",[]):
          "within %d minutes. It works once." % (p["item"],p["otp"],p["expires_in_min"]))
     print("%s\t%s\t%s" % (p["channel"],p["handle"],msg))
 ' | while IFS="$(printf '\t')" read -r chan recip msg; do
-    "$ZEROCLAW" channel send "$msg" --channel-id "$chan" --recipient "$recip" \
-      || logger -t solvend "OTP delivery FAILED for $recip"   # [?] verify --channel-id accepts an alias
+    if [ "$chan" = "shopbot" ]; then
+        # Orders placed through the button bot (solvend/shop_bot.py): it owns
+        # the customer bot, so the code goes back through the same Bot API.
+        python3 /opt/solvend/shop_bot.py notify "$recip" "$msg" \
+          || logger -t solvend "OTP delivery FAILED for shopbot:$recip"
+    else
+        "$ZEROCLAW" channel send "$msg" --channel-id "$chan" --recipient "$recip" \
+          || logger -t solvend "OTP delivery FAILED for $recip"   # [?] verify --channel-id accepts an alias
+    fi
 done
 
 # Revenue reporting to peaq. Same SHELL job as settlement, no model in the

@@ -106,7 +106,11 @@ timeout_secs = 30
 # second one in BotFather, it takes a minute.
 # ---------------------------------------------------------------------------
 [channels.telegram.shop]                               # [V] channels.telegram.<alias>
-enabled = true
+# DISABLED 2026-10-08. The customer bot is now driven by solvend/shop_bot.py
+# (buttons -> invoice -> wallet pay link, no model in the purchase). Telegram
+# delivers a bot's updates to ONE long-poller only, so ZeroClaw must not poll
+# this token too (the loser gets 409 Conflict). The agent keeps the operator bot.
+enabled = false
 bot_token = "REDACTED-CUSTOMER-BOT"                    # customer-facing bot
 dm_policy = "all"                                      # [V] allowlist | ignore | all — customers DM the vending machine
 group_policy = "ignore"                                # [V] no group traffic
@@ -244,7 +248,7 @@ skills = ["solana-pay-invoice", "dispense-otp"]        # [?] confirm key name (s
 # ---------------------------------------------------------------------------
 [agents.solvend]                                       # [V] agents.<alias>
 enabled = true                                         # [V]
-channels = ["telegram.shop", "telegram.operator"]      # [V]
+channels = ["telegram.operator"]                       # [V] telegram.shop -> shop_bot.py (2026-10-08)
 model_provider = "groq.default"                        # [V] "<type>.<alias>" — NOT the full
                                                        # providers.models.* path. Validated at
                                                        # startup, so a wrong value fails loudly.

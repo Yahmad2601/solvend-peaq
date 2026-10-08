@@ -255,14 +255,17 @@ def fallback_transport(payments, ata=MERCHANT_ATA):
             body = tx(pre=p.get("pre", 0), post=p.get("post", 1_500_000),
                       err=p.get("err"))
             body["blockTime"] = p["block_time"]
+            if p.get("refs"):
+                body["transaction"] = {"message": {"accountKeys": [
+                    {"pubkey": r} for r in p["refs"]]}}
             return {"result": body}
         return {"result": None}
     return _t
 
 
-def pay(sig, post=1_500_000, offset=5, err=None, pre=0):
+def pay(sig, post=1_500_000, offset=5, err=None, pre=0, refs=()):
     return {"sig": sig, "post": post, "pre": pre, "err": err,
-            "block_time": solvend.now() + offset}
+            "block_time": solvend.now() + offset, "refs": list(refs)}
 
 
 fresh()
@@ -313,6 +316,37 @@ check("one payment settles exactly one of two identical invoices",
 fresh()
 r = solvend.cmd_watch(fallback_transport([pay("FB8")]))
 check("fallback keeps the watch payload small", len(json.dumps(r)) < 400)
+
+print("\nstale invoices — an old unpaid invoice must not capture a new payment")
+# Found 2026-10-08: two-month-old AWAITING_PAYMENT water invoices were still
+# open, and the fallback binds oldest-first.
+fresh()                                             # INV-0001, REF1, cola
+with solvend.db() as c:
+    c.execute("UPDATE invoices SET created_at=? WHERE invoice_id='INV-0001'",
+              (solvend.now() - solvend.UNPAID_TTL_SECS - 1,))
+    c.execute("INSERT INTO invoices (invoice_id, reference, item, amount_base,"
+              " channel, handle, status, created_at) VALUES"
+              " ('INV-0002','REF7','cola',1500000,'whatsapp.shop','+5511888',"
+              " 'AWAITING_PAYMENT', ?)", (solvend.now(),))
+r = solvend.cmd_watch(fallback_transport([pay("FB9")]))
+check("unpaid invoice expires after UNPAID_TTL", r["unpaid_expired"] == ["INV-0001"])
+check("the fresh invoice gets the payment, not the stale one",
+      [p["invoice_id"] for p in r["newly_paid"]] == ["INV-0002"])
+with solvend.db() as c:
+    st = c.execute("SELECT status FROM invoices WHERE invoice_id='INV-0001'").fetchone()[0]
+check("expired unpaid invoice is closed", st == "UNPAID_EXPIRED")
+
+print("\nfallback — a payment naming one invoice never settles another")
+fresh()                                             # INV-0001, REF1, older
+with solvend.db() as c:
+    c.execute("INSERT INTO invoices (invoice_id, reference, item, amount_base,"
+              " channel, handle, status, created_at) VALUES"
+              " ('INV-0002','REF8','cola',1500000,'whatsapp.shop','+5511777',"
+              " 'AWAITING_PAYMENT', ?)", (solvend.now(),))
+r = solvend.cmd_watch(fallback_transport([pay("FB10", refs=["REF8"])]))
+check("payment carrying REF8 settles INV-0002, not the older INV-0001",
+      [p["invoice_id"] for p in r["newly_paid"]] == ["INV-0002"])
+check("the older invoice stays open", r["pending"] == 1)
 
 print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
 for f in FAIL:

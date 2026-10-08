@@ -13,6 +13,7 @@ comparisons, so a prompt-injected model cannot talk its way into a dispense.
 
 State machine:
   AWAITING_PAYMENT --(validated on-chain transfer)--> PAID_UNCLAIMED  (+OTP, +15min)
+  AWAITING_PAYMENT --(unpaid for 30 min)----------->  UNPAID_EXPIRED
   PAID_UNCLAIMED   --(correct OTP at keypad)-------->  CLAIMED
   PAID_UNCLAIMED   --(otp_expires_at passed)-------->  PAID_EXPIRED
   PAID_EXPIRED     --(customer asks, sold out)------>  EXPIRED_REFUND_REQUESTED
@@ -49,6 +50,11 @@ ITEMS = {
     "energy": {"price_base": 2_500_000, "slot": "drink-3"},
 }
 OTP_TTL_SECS = 15 * 60
+# An invoice nobody paid is closed after this. Before 2026-10-08 unpaid invoices
+# lived forever, and the exact-amount fallback binds the OLDEST open invoice
+# first, so a two-month-old water invoice would have captured the next 1.00
+# payment anyone made and sent its code to a stale chat.
+UNPAID_TTL_SECS = 30 * 60
 MAX_OTP_ATTEMPTS = 5          # per invoice, then the OTP is dead
 RPC_TIMEOUT_SECS = 10
 SIG_LOOKBACK = 10             # signatures per reference per poll
@@ -233,8 +239,18 @@ def scan_merchant_payments(_transport=None, since: int = 0) -> list:
     return payments
 
 
+def account_keys(tx: dict) -> set:
+    """Every account a jsonParsed transaction touches, as base58 strings."""
+    msg = ((tx or {}).get("transaction") or {}).get("message") or {}
+    keys = set()
+    for k in msg.get("accountKeys") or []:
+        keys.add(k.get("pubkey") if isinstance(k, dict) else k)
+    keys.discard(None)
+    return keys
+
+
 def match_unreferenced(payments: list, amount_base: int, created_at: int,
-                       used: set):
+                       used: set, foreign_refs: set = frozenset()):
     """-> signature of a payment that can settle this invoice, or None.
 
     Deliberately stricter than the reference path, because without a reference
@@ -248,6 +264,10 @@ def match_unreferenced(payments: list, amount_base: int, created_at: int,
       * signature not already spent on another invoice. The UNIQUE index on
         `signature` is the real backstop; this keeps us from relying on an
         IntegrityError for ordinary control flow.
+      * the payment does not carry ANOTHER invoice's reference. A payment that
+        names its invoice is that invoice's, settled or not; it must never be
+        inferred onto a different one (and that customer's code sent to the
+        wrong chat) just because the amounts match.
 
     Ambiguity is resolved oldest-payment-first against oldest-invoice-first
     (cmd_watch iterates by created_at), so two identical concurrent invoices are
@@ -261,6 +281,8 @@ def match_unreferenced(payments: list, amount_base: int, created_at: int,
             continue
         if p["block_time"] < created_at:
             continue
+        if foreign_refs and account_keys(p["tx"]) & foreign_refs:
+            continue                      # it names a different invoice
         if not validate_transfer(p["tx"], amount_base):
             continue                      # authorization, same gate as always
         return p["signature"]
@@ -327,6 +349,20 @@ def cmd_watch(_transport=None) -> dict:
             " RETURNING invoice_id", (t,))
         expired = [r["invoice_id"] for r in cur.fetchall()]
 
+        # 1b. Close invoices nobody paid. Pure SQL, before discovery, so a stale
+        # invoice can never capture a fresh payment through the fallback.
+        cur = conn.execute(
+            "UPDATE invoices SET status='UNPAID_EXPIRED'"
+            " WHERE status='AWAITING_PAYMENT' AND created_at <= ?"
+            " RETURNING invoice_id", (t - UNPAID_TTL_SECS,))
+        unpaid_expired = [r["invoice_id"] for r in cur.fetchall()]
+
+        # Every reference the ledger has ever issued. A payment carrying one of
+        # these belongs to that invoice and is excluded from fallback inference
+        # for any other.
+        all_refs = {r["reference"] for r in conn.execute(
+            "SELECT reference FROM invoices")}
+
         open_invoices = conn.execute(
             "SELECT invoice_id, reference, amount_base, item, channel, handle,"
             " created_at FROM invoices WHERE status='AWAITING_PAYMENT'"
@@ -355,7 +391,8 @@ def cmd_watch(_transport=None) -> dict:
                         scanned = scan_merchant_payments(_transport, oldest)
                         did_scan = True
                     sig = match_unreferenced(scanned, inv["amount_base"],
-                                             inv["created_at"], used_sigs)
+                                             inv["created_at"], used_sigs,
+                                             all_refs - {inv["reference"]})
             except (urllib.error.URLError, OSError, ValueError, KeyError):
                 errors += 1          # transient RPC failure: leave it open, retry next tick
                 continue
@@ -387,6 +424,7 @@ def cmd_watch(_transport=None) -> dict:
         ).fetchone()["c"]
 
     return {"newly_paid": newly_paid, "expired": expired,
+            "unpaid_expired": unpaid_expired,
             "pending": pending, "rpc_errors": errors}
 
 

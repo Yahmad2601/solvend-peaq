@@ -77,7 +77,7 @@ reporting.
 ## Layout
 
 ```
-solvend/solvend.py        state machine, ledger, atomic OTP burn (50 tests)
+solvend/solvend.py        state machine, ledger, atomic OTP burn (55 tests)
 solvend/test_solvend.py   run before and after every change
 solvend/solvend-serial.py ESP32 bridge
 solvend/bin/              env wrappers + poller
@@ -126,7 +126,7 @@ deploy/                   bootstrap, deploy, systemd units
 - **File bugs upstream to peaq as they're found.** Framework hackathons reward
   it heavily; a bug list in a README scores nothing.
 - **Run `python3 solvend/test_solvend.py` before and after touching `solvend.py`.**
-  Want `50 passed, 0 failed`.
+  Want `55 passed, 0 failed`.
 - **Feature freeze end of Day 3.** After that: evidence, README, video, submit.
 
 ## Known traps (paid for already)

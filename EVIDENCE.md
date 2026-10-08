@@ -84,7 +84,12 @@ Tests on the Pi (Python 3.13): `peaq/test_machine.py` 22 passed, 0 failed ·
 | | | | | | |
 
 **Credit rating**
-- Before first sale: `...`
+- Before first sale (8 Oct 2026, right after activation, via `machine.py --status`
+  and the public `GET https://mcr.peaq.xyz/mcr/{did}`): `mcr: Provisioned`,
+  `mcr_score: 0`, `bond_status: bonded`, `event_count: 0`, `revenue_trend:
+  insufficient`. Screenshot of `/machine` showing Provisioned: `...`
+- Historical sales held below the $10/day threshold: 2026-08-06 $7.50 and
+  2026-08-07 $4.50. Not reported, by design.
 - After N sales: `...`
 
 **Media**

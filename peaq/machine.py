@@ -149,9 +149,10 @@ def utc_day(epoch_secs):
 # Verified on the Pi 8 Oct 2026 (--spike: "client ok", chain_id 3338): this
 #   from_wallet call, Address-wrapped contracts and tokenomics20 construct a
 #   working client. --activate-preview through it gives the same machine ID.
-# UNVERIFIED until the first real event and credit read: that __init__'s
-#   api_url is the MCR URL (same 127.0.0.1:8000 default as PEAQOS_MCR_API_URL),
-#   and that the submit_event metadata bytes below are accepted as-is.
+# Verified 8 Oct 2026 after activation: --status reads the MCR through this
+#   client (Provisioned, bonded), so api_url / the deployment MCR is right.
+# UNVERIFIED until the first real event: that the submit_event metadata bytes
+#   below are accepted as-is.
 # Activate against Economics 2.0 (kwarg verified from PeaqosClient.__init__):
 #   tokenomics20=Tokenomics20Config(deployment_id=DEPLOYMENT_ID)
 #   deployment_id is one of "agung-2026-08-28" | "peaq-mainnet". Only

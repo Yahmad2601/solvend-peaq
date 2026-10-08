@@ -19,6 +19,12 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "solvend"))
 sys.path.insert(0, os.path.join(HERE, "..", "peaq"))
 
+try:
+    import qrcode       # noqa: F401  — the payment screen needs it
+except ImportError:
+    sys.exit(f"qrcode is not installed for {sys.executable}\n"
+             f"  {sys.executable} -m pip install qrcode")
+
 import solvend          # noqa: E402  — real invoices schema
 import machine          # noqa: E402  — real peaq_events schema
 import machine_display as md   # noqa: E402

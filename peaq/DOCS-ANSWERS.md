@@ -779,6 +779,18 @@ as SolVend (Pi + Solana payments + peaq identity). Differentiators to stress:
 real strangers paying for a real product, and **revenue events → Machine
 Credit Rating** (economics, not just identity).
 
+## Funding route: Stargate (8 Oct 2026)
+
+The peaq Discord pointed to Stargate. peaq's own DeFi guide
+(docs.peaq.xyz/build/getting-started/defi-guide) names
+**https://stargate.finance/bridge** as the bridge to peaq ("If it's your first
+time bridging to peaq… enable Gas on Destination"). Stargate's token picker
+lists PEAQ on Solana, Base, Ethereum, BNB and Peaq, plus USDC on Peaq.
+Plan: swap a little USDC → PEAQ in Phantom (mint verified above), then use
+Stargate to transfer **PEAQ (Solana) → PEAQ (Peaq)** to the machine's `0x`
+address. On arrival it's native PEAQ (the OFT adapter on peaq locks/releases
+native PEAQ), which is what the bond and gas need.
+
 ## Second dry run (8 Oct 2026)
 
 Output saved to `peaq/activation-preview.json`. `machine_id`

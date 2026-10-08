@@ -52,8 +52,8 @@ MACHINE_DID = f"did:peaq:{MACHINE_ID}" if MACHINE_ID else ""
 # GET /mcr/{did}, no API key. Verified from docs.peaq.xyz get-mcr, 8 Oct 2026.
 MCR_API_URL = os.environ.get("PEAQOS_MCR_API_URL", "https://mcr.peaq.xyz")
 MCR_CACHE_SECS = 60         # the screen refreshes every 5 s; the MCR does not need to
-# peaq mainnet explorer is peaq.subscan.io (docs: Block Explorers). UNVERIFIED:
-# the /tx/<hash> path shape. Override if Subscan links 404.
+# peaq mainnet explorer is peaq.subscan.io (docs: Block Explorers). The
+# /tx/<0x hash> path was verified on the activation tx, 8 Oct 2026.
 EXPLORER = os.environ.get("PEAQ_EXPLORER_URL", "https://peaq.subscan.io")
 MIN_REVENUE_CENTS = 1000    # mirrors peaq/machine.py: a day below $10 is held
 

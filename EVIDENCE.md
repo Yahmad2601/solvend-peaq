@@ -55,6 +55,16 @@ peaq-os-cli 0.0.15 (peaq_os_sdk 0.11.0)
 All native deps installed as prebuilt `aarch64` wheels; no compilation.
 Screenshot: `...` *(save into the repo and link here)*
 
+**SolVend's own code drives the SDK on the device** (8 Oct 2026, Pi, SDK 0.11.0)
+```
+$ python3 peaq/machine.py --spike
+  "address": "0x60901F3fC014Eb097411720f55f247a5E6652996",
+  "chain_id": 3338,
+  "sdk": "client ok"
+```
+Tests on the Pi (Python 3.13): `peaq/test_machine.py` 22 passed, 0 failed ·
+`solvend/test_solvend.py` 50 passed, 0 failed.
+
 **Machine identity: preview (dry run, 8 Oct 2026, peaq mainnet)**
 - machine_type `VendingMachine`, credential subject `peaq/credential-subject.json`
   (canonical JSON, includes sha256 of the Pi's hardware serial)

@@ -146,10 +146,12 @@ def utc_day(epoch_secs):
 # from_wallet config_kwargs (docs example): rpc_url, identity_registry,
 #   identity_staking, event_registry, machine_nft, did_registry,
 #   batch_precompile.
-# UNVERIFIED until --spike/--sync run on the Pi: that wrapping addresses in
-#   peaq_os_sdk.Address is accepted, that __init__'s api_url is the MCR URL
-#   (same 127.0.0.1:8000 default as PEAQOS_MCR_API_URL), and that the
-#   submit_event metadata bytes below are accepted as-is.
+# Verified on the Pi 8 Oct 2026 (--spike: "client ok", chain_id 3338): this
+#   from_wallet call, Address-wrapped contracts and tokenomics20 construct a
+#   working client. --activate-preview through it gives the same machine ID.
+# UNVERIFIED until the first real event and credit read: that __init__'s
+#   api_url is the MCR URL (same 127.0.0.1:8000 default as PEAQOS_MCR_API_URL),
+#   and that the submit_event metadata bytes below are accepted as-is.
 # Activate against Economics 2.0 (kwarg verified from PeaqosClient.__init__):
 #   tokenomics20=Tokenomics20Config(deployment_id=DEPLOYMENT_ID)
 #   deployment_id is one of "agung-2026-08-28" | "peaq-mainnet". Only
@@ -176,6 +178,14 @@ def _client():
             raise RuntimeError("missing env: " + ", ".join(missing))
         from peaq_os_sdk import Address, PeaqosClient, Tokenomics20Config
         env = os.environ
+        # A person at a terminal gets a prompt, like the CLI. The poller has
+        # no TTY, so there the SDK raises PeaqosError instead of hanging —
+        # verified on the Pi, 8 Oct 2026. Kept in this process's environment
+        # only (never on disk), so a child `peaqos` reads it without asking twice.
+        if not env.get("OWS_PASSPHRASE") and sys.stdin.isatty():
+            import getpass
+            env["OWS_PASSPHRASE"] = getpass.getpass(
+                f"Vault passphrase for wallet '{WALLET}': ")
         _client_cache = PeaqosClient.from_wallet(
             WALLET,
             rpc_url=env["PEAQOS_RPC_URL"],

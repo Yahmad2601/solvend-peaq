@@ -1,0 +1,22 @@
+{
+  "status": "error",
+  "mode": "self-owned",
+  "deployment_id": "peaq-mainnet",
+  "chain_id": "3338",
+  "machine_state_and_sync": "0xcD1917FB2a56459AcA34FDD118e08776dE0890f2",
+  "machine_id": "8600820691859294852796023821329786994502637838982221572620760063908348418155",
+  "machine_type": "VendingMachine",
+  "manufacturer": "0x60901F3fC014Eb097411720f55f247a5E6652996",
+  "tier": "entry",
+  "owner": "0x60901F3fC014Eb097411720f55f247a5E6652996",
+  "controller": "0x60901F3fC014Eb097411720f55f247a5E6652996",
+  "peaq_token": "0x0000000000000000000000000000000000000809",
+  "bond_amount": "492112543185951367",
+  "voucher_credit": "0",
+  "net_peaq_amount": "492112543185951367",
+  "balance": "0",
+  "approval_required": true,
+  "error_code": "INSUFFICIENT_PEAQ",
+  "message": "The activation signer holds 0.0000 PEAQ, which does not cover the 0.4921 PEAQ bond plus 0.0500 PEAQ of gas headroom (short by 0.5421 PEAQ).",
+  "guidance": "Fund the activation signer and re-run."
+}

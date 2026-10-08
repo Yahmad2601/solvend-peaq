@@ -1,1 +1,1 @@
-{"verificationMethods": [], "authentication": [], "serviceEndpoints": [{"id": "#source", "serviceType": "SourceCode", "serviceEndpoint": "https://github.com/Yahmad2601/solvend-peaq"}]}
+{"verificationMethods": [{"id": "#key-1", "methodType": "EcdsaSecp256k1RecoveryMethod2020", "controller": "0x60901F3fC014Eb097411720f55f247a5E6652996", "publicKeyMultibase": "0x60901F3fC014Eb097411720f55f247a5E6652996"}], "authentication": [0], "serviceEndpoints": [{"id": "#source", "serviceType": "SourceCode", "serviceEndpoint": "https://github.com/Yahmad2601/solvend-peaq"}]}

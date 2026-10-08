@@ -645,6 +645,35 @@ endpoint (`#source` → the GitHub repo). Add a proper secp256k1 key later with
 `set_machine_verification_methods` once its `publicKeyMultibase` encoding is
 verified. That's editable, so it doesn't block activation.
 
+## EVM verification method: `publicKeyMultibase` = the 0x address
+
+> "methodType: `EcdsaSecp256k1RecoveryMethod2020` — correct.
+> publicKeyMultibase: for EVM, the docs explicitly say this field '**always uses
+> the account address**' — not a multicodec-encoded compressed public key. The
+> example shows `"publicKeyMultibase": "0x9Eeab1…"` (the raw 0x address)… The
+> `z…` format only appears in Substrate examples." Source: DID Operations (JS),
+> DID Operations (Python).
+
+→ **Supersedes the "activate with no verification method" decision above.**
+The DID document now carries `#key-1` (`EcdsaSecp256k1RecoveryMethod2020`,
+controller and publicKeyMultibase = the machine address) with
+`authentication: [0]`. It's generated on the Pi from `wallet show`, never
+typed. Caveat: the source pages describe the legacy DID precompile; this is
+editable after activation if Tokenomics 2.0 expects otherwise.
+
+*Verified 8 Oct 2026.*
+
+## Getting PEAQ: what the docs say
+
+Two documented paths: a standard EVM transfer from a wallet holding PEAQ on
+peaq (paste the `0x` address, send), or Substrate → EVM via the Address
+Converter. A PEAQ OFT exists on Solana, but "the docs don't detail a
+Solana→peaq-EVM bridge path." **The docs list no exchanges** that withdraw on
+the peaq EVM network. PEAQ itself is the native token, exposed at the `0x…0809`
+precompile.
+
+*Verified 8 Oct 2026.*
+
 ## Second dry run (8 Oct 2026)
 
 Output saved to `peaq/activation-preview.json`. `machine_id`

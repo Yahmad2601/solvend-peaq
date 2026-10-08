@@ -65,6 +65,12 @@ check("revenue in cents", snap["revenue_cents"] == 400)
 check("7-day window", snap["sales_7d"] == 1 and snap["revenue_7d_cents"] == 150)
 check("pending = sold - reported", snap["pending_cents"] == 400)
 
+md.REPORT_FROM = NOW - 7200                         # "mainnet switch" two hours ago
+snap = md.ledger_snapshot(now=NOW)
+check("cutoff hides pre-switch (devnet) sales",
+      snap["sales"] == 1 and snap["revenue_cents"] == 150)
+md.REPORT_FROM = 0
+
 print("\nledger — after a reported event")
 with sqlite3.connect(md.DB) as c:
     c.executescript(machine.SCHEMA)

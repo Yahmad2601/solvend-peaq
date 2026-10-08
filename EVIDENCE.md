@@ -98,8 +98,10 @@ Tests on the Pi (Python 3.13): `peaq/test_machine.py` 22 passed, 0 failed ·
   and the public `GET https://mcr.peaq.xyz/mcr/{did}`): `mcr: Provisioned`,
   `mcr_score: 0`, `bond_status: bonded`, `event_count: 0`, `revenue_trend:
   insufficient`. Screenshot of `/machine` showing Provisioned: `...`
-- Historical sales held below the $10/day threshold: 2026-08-06 $7.50 and
-  2026-08-07 $4.50. Not reported, by design.
+- The ledger's 9 sales from 6–7 Aug 2026 were a **devnet rehearsal** (faucet
+  USDC, mint `4zMMC9…JDncDU`). Found 8 Oct 2026 when a test invoice still
+  carried the devnet mint. They're excluded from reporting and from the display
+  by `PEAQ_REPORT_FROM` (the mainnet switch time). Never report them.
 - After N sales: `...`
 
 **Media**

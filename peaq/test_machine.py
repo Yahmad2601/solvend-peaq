@@ -143,6 +143,22 @@ check("no ledger rows written on failure", n == 0)
 out = machine.sync()
 check("next run submits the day exactly once", out["submitted"] == 1 and len(SUBMITTED) == 1)
 
+print("\ncutoff — devnet rehearsal sales are never revenue")
+reset()
+for i in range(7):
+    sale(500 + i, "cola", DAY1 + i)                 # before the mainnet switch
+for i in range(4):
+    sale(600 + i, "energy", DAY2 + i)               # after it: 10.00
+machine.REPORT_FROM = DAY2
+try:
+    out = machine.sync()
+    check("only post-cutoff sales are reported",
+          out["submitted"] == 1 and SUBMITTED[0]["value"] == 1000)
+    check("pre-cutoff day is neither reported nor held",
+          out["holding"] == {} and json.loads(SUBMITTED[0]["raw_data"])["sales"] == 4)
+finally:
+    machine.REPORT_FROM = 0
+
 print("\ndry run — shows what would publish, publishes nothing")
 reset()
 for i in range(7):

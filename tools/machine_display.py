@@ -56,6 +56,9 @@ MCR_CACHE_SECS = 60         # the screen refreshes every 5 s; the MCR does not n
 # /tx/<0x hash> path was verified on the activation tx, 8 Oct 2026.
 EXPLORER = os.environ.get("PEAQ_EXPLORER_URL", "https://peaq.subscan.io")
 MIN_REVENUE_CENTS = 1000    # mirrors peaq/machine.py: a day below $10 is held
+# Mirrors peaq/machine.py: sales before the mainnet switch were devnet
+# rehearsals in faucet USDC and are not revenue. 0 = count everything.
+REPORT_FROM = int(os.environ.get("PEAQ_REPORT_FROM", "0") or 0)
 
 
 # --------------------------------------------------------------------------
@@ -105,12 +108,13 @@ def ledger_snapshot(now=None):
     try:
         # amount_base is micro-USDC; cents = base // 10_000, matching to_cents
         # for every catalogue price.
+        week = max(now - 7 * 86400, REPORT_FROM)
         row = conn.execute(
             "SELECT COUNT(*), COALESCE(SUM(amount_base),0),"
             " COALESCE(SUM(claimed_at >= ?),0),"
             " COALESCE(SUM(CASE WHEN claimed_at >= ? THEN amount_base END),0)"
-            " FROM invoices WHERE status='CLAIMED'",
-            (now - 7 * 86400, now - 7 * 86400)).fetchone()
+            " FROM invoices WHERE status='CLAIMED' AND claimed_at >= ?",
+            (week, week, REPORT_FROM)).fetchone()
         snap["sales"], snap["sales_7d"] = row[0], row[2]
         snap["revenue_cents"] = row[1] // 10_000
         snap["revenue_7d_cents"] = row[3] // 10_000
@@ -260,7 +264,10 @@ def identity_card(snap, detail=False):
             f'{html.escape(short(e["tx_hash"]))}</a></td></tr>' for e in led["events"])
         body += ('<table><tr><th>UTC day</th><th>sales</th><th>revenue</th>'
                  f'<th>peaq event</th></tr>{rows}</table>')
-    body += (f'<p class="note">Every can sold is a real Solana USDC payment. Sales are '
+    since = (time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(REPORT_FROM))
+             if REPORT_FROM else None)
+    body += (f'<p class="note">Every can counted here was paid in mainnet USDC on '
+             f'Solana{f", counted from {since}" if since else ""}. Sales are '
              f'reported to peaq as one revenue event per UTC day once the day clears '
              f'{usd(snap["threshold_cents"])}, the minimum the credit rating counts. '
              f'{usd(max(led["pending_cents"], 0))} is waiting to be reported.</p>')

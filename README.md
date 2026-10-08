@@ -160,8 +160,8 @@ Serial protocol, 115200 8N1: `KEYPAD:<4 digits>` and `EVENT:*` up;
 ```bash
 git clone https://github.com/Yahmad2601/solvend-peaq && cd solvend-peaq
 python3 solvend/test_solvend.py           # 50 passed: payments, codes, refunds
-python3 peaq/test_machine.py              # 22 passed: cents, threshold, idempotency
-pip install qrcode && python3 tools/test_machine_display.py   # 20 passed
+python3 peaq/test_machine.py              # 24 passed: cents, threshold, idempotency, cutoff
+pip install qrcode && python3 tools/test_machine_display.py   # 21 passed
 ```
 
 **peaq integration** (the full path we followed, with every answer we needed
@@ -220,8 +220,12 @@ EVIDENCE.md                 what has been proven, with links
   event payload instead, where anyone can check them. Filed upstream
   ([`UPSTREAM-ISSUES.md` #2](peaq/UPSTREAM-ISSUES.md)).
 - **A day under $10 does not count.** That's peaq's rule for the credit
-  rating, so slow days are held, not reported. Our sales from August ($7.50
-  and $4.50 days) are below it and stay held.
+  rating, so slow days are held, not reported.
+- **The August sales were a devnet rehearsal and are excluded.** SolVend first
+  ran end to end on Solana devnet with faucet USDC (9 cans, 6–7 Aug 2026).
+  Those sales are real dispenses but not real money, so they are never
+  reported. `PEAQ_REPORT_FROM` is set to the moment the machine switched to
+  mainnet USDC, and both the reporter and the display ignore anything earlier.
 - **Short history.** The machine was activated on 8 Oct 2026; the credit rating
   reflects days of trade, not months. _(update with what the rating actually
   did)_

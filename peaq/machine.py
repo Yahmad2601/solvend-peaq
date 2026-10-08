@@ -81,6 +81,11 @@ DEPLOYMENT_ID = os.environ.get("TOKENOMICS_DEPLOYMENT_ID", "peaq-mainnet")
 MCR_API_URL = os.environ.get("PEAQOS_MCR_API_URL", "https://mcr.peaq.xyz")
 WALLET = os.environ.get("PEAQOS_OWS_WALLET", "solvend")
 MACHINE_ID = os.environ.get("PEAQ_MACHINE_ID", "")
+# Only sales claimed at or after this Unix time are revenue. The ledger also
+# holds devnet rehearsal sales paid in faucet USDC; reporting those to peaq
+# mainnet as USD revenue would be fabricated revenue. Set it to the moment the
+# machine switched to mainnet USDC. 0 = no cutoff (tests, fresh ledgers).
+REPORT_FROM = int(os.environ.get("PEAQ_REPORT_FROM", "0") or 0)
 # Tokenomics mode DID is "did:peaq:" + the base-10 machine ID (query_mcr docstring).
 MACHINE_DID = f"did:peaq:{MACHINE_ID}" if MACHINE_ID else ""
 
@@ -298,7 +303,8 @@ def unreported(conn, limit=1000):
         "  FROM invoices i"
         "  LEFT JOIN peaq_events p ON p.invoice_id = i.invoice_id"
         " WHERE i.status = 'CLAIMED' AND p.invoice_id IS NULL"
-        " ORDER BY i.rowid ASC LIMIT ?", (limit,)).fetchall()
+        "   AND i.claimed_at >= ?"
+        " ORDER BY i.rowid ASC LIMIT ?", (REPORT_FROM, limit)).fetchall()
 
 
 def group_by_day(rows):
@@ -408,6 +414,7 @@ def status():
         "revenue_reported_usd": f"{rep['s'] / 100:.2f}",
         "pending_by_day": {d: f"{b['cents'] / 100:.2f}" for d, b in pending.items()},
         "threshold_usd": f"{MIN_REVENUE_CENTS / 100:.2f}",
+        "report_from": REPORT_FROM or None,
     }
     try:
         out["credit"] = peaq_credit_score(MACHINE_DID) if MACHINE_DID else None

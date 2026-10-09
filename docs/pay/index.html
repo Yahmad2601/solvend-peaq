@@ -76,9 +76,14 @@ const USDC_MINT  = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";   // mainnet 
 const DECIMALS   = 6;
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const ATA_PROGRAM   = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
-// Public endpoints, tried in order (blockhash + account checks only).
-const RPCS = ["https://api.mainnet-beta.solana.com",
-              "https://solana-rpc.publicnode.com"];
+// Public endpoints, tried in order. From a web page (Origin header) these
+// refuse every account lookup: api.mainnet-beta answers 403 to everything,
+// publicnode wants a token for indexed calls. Only publicnode's
+// getLatestBlockhash works (tested 2026-10-09), so that is ALL this page asks
+// the network for. Balance and account checks are left to the wallet, which
+// simulates the transfer before the customer approves it.
+const RPCS = ["https://solana-rpc.publicnode.com",
+              "https://api.mainnet-beta.solana.com"];
 
 const $ = (id) => document.getElementById(id);
 const say = (msg, cls) => { $("status").className = cls || ""; $("status").textContent = msg; };
@@ -123,16 +128,17 @@ function openInWalletLinks() {
     `<a class="btn alt" href="https://solflare.com/ul/v1/browse/${here}?ref=${ref}">Open in Solflare</a>`;
 }
 
-async function rpcConnection() {
+// Every read goes through here, so one endpoint refusing the wallet browser
+// (the free public RPC often does) falls through to the next, and a real
+// network failure is reported as one instead of looking like "no USDC".
+async function rpcCall(fn) {
   let lastErr;
   for (const url of RPCS) {
-    try {
-      const c = new W.Connection(url, "confirmed");
-      await c.getLatestBlockhash("confirmed");
-      return c;
-    } catch (e) { lastErr = e; }
+    try { return await fn(new W.Connection(url, "confirmed")); }
+    catch (e) { lastErr = e; }
   }
-  throw lastErr || new Error("no RPC reachable");
+  throw new Error("Can't reach the Solana network right now (" +
+                  ((lastErr && lastErr.message) || lastErr) + "). Try again in a moment.");
 }
 
 function ata(owner, mint) {
@@ -173,28 +179,28 @@ async function pay() {
     const merchant = new W.PublicKey(MERCHANT);
     if (buyer.equals(merchant)) throw new Error("This is the shop's own wallet. Pay from a different wallet.");
 
-    say("Checking your USDC balance…");
-    const conn = await rpcConnection();
+    const who = buyer.toBase58().slice(0, 4) + "…" + buyer.toBase58().slice(-4);
+    // Pay from the wallet's associated USDC account, derived offline: it is
+    // where Phantom and Solflare keep USDC. If it is empty or missing, the
+    // wallet's own simulation shows that before anything is signed.
     const src = ata(buyer, mint), dst = ata(merchant, mint);
-    const bal = await conn.getTokenAccountBalance(src).catch(() => null);
-    if (!bal) throw new Error("This wallet has no USDC account on Solana mainnet.");
-    if (BigInt(bal.value.amount) < units) throw new Error(`Not enough USDC: you have ${bal.value.uiAmountString}, need ${order.amount}.`);
 
-    const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
+    say("Preparing the payment…");
+    const { blockhash, lastValidBlockHeight } = await rpcCall(c => c.getLatestBlockhash("confirmed"));
     const tx = new W.Transaction({ feePayer: buyer, blockhash, lastValidBlockHeight });
     tx.add(transferChecked(src, mint, dst, buyer, units, new W.PublicKey(order.reference)));
 
-    say("Approve the payment in your wallet…");
+    say(`Approve the payment in your wallet (account ${who})…`);
     let signature;
     if (wallet.signAndSendTransaction) {
       const out = await wallet.signAndSendTransaction(tx);
       signature = out.signature || out;
     } else {
       const signed = await wallet.signTransaction(tx);
-      signature = await conn.sendRawTransaction(signed.serialize());
+      signature = await rpcCall(c => c.sendRawTransaction(signed.serialize()));
     }
     say("Sent. Waiting for the network to confirm…");
-    await conn.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed").catch(() => {});
+    await rpcCall(c => c.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed")).catch(() => {});
     say("Paid ✓  Your 4-digit code will arrive in Telegram within about a minute.", "ok");
     $("actions").innerHTML =
       `<a class="btn alt" href="https://solscan.io/tx/${encodeURIComponent(signature)}">View on Solscan</a>`;

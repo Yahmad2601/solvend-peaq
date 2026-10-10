@@ -63,10 +63,8 @@ timeout_secs = 30                                      # [V]
 #
 # Alias MUST be `default` here too — same trap as gemini above.
 [providers.models.groq.default]                        # providers.models.<type>.<alias>
-# Was llama-3.3-70b-versatile until 2026-10-08. Groq retired it from the free
-# tier on 2026-08-16 (Enterprise-only since): the agent answered every order
-# with `404 model_not_found`. Groq's named replacement: openai/gpt-oss-120b.
-# Fallback if rate-limited: openai/gpt-oss-20b.
+# Groq's replacement for llama-3.3-70b-versatile, which left the free tier on
+# 2026-08-16. Fallback if rate-limited: openai/gpt-oss-20b.
 model = "openai/gpt-oss-120b"
 api_key = "REDACTED"                                   # gsk_... — real value only on the Pi
 timeout_secs = 30
@@ -80,8 +78,7 @@ timeout_secs = 30
 # ~/.zeroclaw/config.toml: ZeroClaw stores it encrypted (173 chars), and Groq
 # answers that with `invalid_api_key`. Or read https://console.groq.com/docs/models
 #   curl -s https://api.groq.com/openai/v1/models -H "Authorization: Bearer $KEY"
-# Check https://console.groq.com/docs/deprecations before demo days: models
-# leave the free tier with little notice (qwen/qwen3.6-27b: 2026-09-14).
+# Model availability: https://console.groq.com/docs/deprecations
 #
 # A doctor run once showed a transient `Groq model list request failed` that
 # cleared by itself. Catalog fetch is not inference — test inference before

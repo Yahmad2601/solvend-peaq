@@ -1,254 +1,225 @@
 # SolVend × peaq
 
-> A vending machine that earns its own credit rating.
+**A physical vending machine that earns its own credit rating.**
 
-SolVend is a **physical vending machine**. A customer messages it in a chat app,
-pays from their own wallet, receives a 4-digit code, types it on the keypad, and
-a gantry drops a can. It runs on a Raspberry Pi inside the machine, driving an
-ESP32 that moves the motors.
+SolVend is a working vending machine. A customer opens its Telegram bot, taps a
+drink, pays in USDC from their own Solana wallet, receives a 4-digit code, and
+types it on the machine's keypad; a gantry delivers the can. A Raspberry Pi
+inside the machine runs everything.
 
-This repo makes it an economic participant. SolVend holds a **peaq machine
-identity on mainnet**, and the cans it sells are published on-chain as revenue
-events, so its **Machine Credit Rating is built from real trade**, not
-simulated telemetry.
-
-**Most Machine Economy demos simulate a machine. This one takes money from
-strangers and physically dispenses a product.**
+This project makes SolVend an economic participant on **peaq**. The machine
+holds a peaq identity on mainnet and reports its sales as revenue events, so
+its **Machine Credit Rating is built from real trade**, not simulated telemetry.
 
 | | |
 |---|---|
 | **Machine DID** | `did:peaq:8600820691859294852796023821329786994502637838982221572620760063908348418155` |
-| **Activation** | [`0xdeab1fed…ed50b77` on Subscan](https://peaq.subscan.io/tx/0xdeab1fed124579378f9558e55861772729ec37ac4b99841cd65e53865ed50b77). Entry tier, 0.495 PEAQ bond, identity NFT minted to the machine |
-| **Credit rating** | [`GET mcr.peaq.xyz/mcr/did:peaq:8600…8155`](https://mcr.peaq.xyz/mcr/did:peaq:8600820691859294852796023821329786994502637838982221572620760063908348418155). Public, no key |
+| **Activation** | [`0xdeab1fed…ed50b77`](https://peaq.subscan.io/tx/0xdeab1fed124579378f9558e55861772729ec37ac4b99841cd65e53865ed50b77) on Subscan: Entry tier, 0.495 PEAQ bond, identity NFT |
+| **Credit rating** | [Live from the MCR API](https://mcr.peaq.xyz/mcr/did:peaq:8600820691859294852796023821329786994502637838982221572620760063908348418155) (public, no key) |
+| **First sale** | [1.00 USDC on Solana mainnet](https://solscan.io/tx/ZF3QEkkNcRV6tVU1c1pV3pTdr4CGmdj5td4x7xeTiS4XuNEYWendSKAo7FTry5tQygMw6FAc6Phwke9eUfoGNyi) |
 | **Network** | peaq mainnet (chain 3338), `peaq-mainnet` Economics 2.0 deployment |
 | **Demo video** | _(link)_ |
-| **Proof** | [`EVIDENCE.md`](EVIDENCE.md): every claim, with the link or log that backs it |
+| **Evidence** | [`EVIDENCE.md`](EVIDENCE.md): every claim with a verifiable artifact |
 
 ---
 
-## Why this matters for the Machine Economy
+## Why it matters
 
 A machine with no financial history is equipment. A machine with verifiable
-revenue is an **asset**: it can be rated, insured, fractionally owned, and
-lent against.
+revenue is an **asset**: it can be rated, insured, financed and fractionally
+owned. The Machine Credit Rating is only as meaningful as the revenue behind
+it, so SolVend is built so that every reported dollar is provably real:
 
-The hard part was never the dashboard. It is proving the revenue is real:
+- **The payment is verified on-chain.** Settlement reads the merchant's USDC
+  balance change from the transaction itself; a receipt, webhook or API
+  response is never trusted.
+- **Revenue is a physical act.** Only invoices that were paid *and* whose code
+  was entered at the keypad count as revenue.
+- **Reporting is automatic and deterministic.** A scheduled job builds revenue
+  events from the ledger. No person and no language model sits between a sale
+  and its report.
 
-- The payment is verified **on-chain**, by reading the merchant account's
-  balance delta, not by trusting a receipt, a webhook, or an API response.
-- Revenue is reported by the **same scheduled job that settles payments**, with
-  no language model in the loop, from ledger rows that only exist once a
-  payment cleared and a can was collected.
-- A dispensed can is a **physical act**. The revenue has a product behind it.
-
-That is what makes the resulting credit rating mean something.
-
-## The loop
+## How it works
 
 ```mermaid
 flowchart LR
-  C[Customer] -->|taps a drink| A[Shop bot on Raspberry Pi<br/>no model]
-  A -->|Pay with Phantom / Solflare| C
+  C[Customer] -->|taps a drink| B[Shop bot<br/>Raspberry Pi]
+  B -->|Pay with Phantom / Solflare| C
   C -->|pays USDC in own wallet| S[(Solana)]
-  W[Minute poller<br/>shell job, no model] -->|verifies balance delta| S
+  W[Minute poller] -->|verifies balance change| S
   W --> L[(SQLite ledger)]
   W -->|4-digit code| C
-  C -->|types code| K[Keypad] --> E[ESP32] --> M[Gantry drops can]
+  C -->|types code| K[Keypad] --> E[ESP32] --> M[Gantry delivers can]
   W -->|daily revenue event| P[(peaq mainnet)]
   P --> R[Machine Credit Rating]
   R --> D[Machine display]
 ```
 
-**Identity.** A one-time activation gave the machine a permanent ID, a
-`did:peaq:` identifier, an identity NFT owned by the machine's own wallet, and a
-one-year Entry-tier bond. The ID is derived from the machine type plus a
-credential subject that includes a hash of **the Pi's own hardware serial**
+### 1. Identity
+
+A one-time activation on peaq mainnet gave the machine a permanent ID, a
+`did:peaq:` identifier, an identity NFT held by the machine's own wallet, and a
+one-year Entry-tier bond. The ID is derived from the machine type and a
+credential subject containing a hash of **the Pi's hardware serial**
 ([`peaq/credential-subject.json`](peaq/credential-subject.json)). The machine's
-wallet was generated **on the Pi** into an encrypted vault; its key has never
-existed anywhere else.
+wallet was generated on the Pi into an encrypted vault; its key has never left
+the device.
 
-**Revenue.** Every minute, after settlement, the poller runs
-`peaq/machine.py --sync`. It groups collected sales by UTC day and, once a day
-reaches **$10**, submits **one revenue event** for that day: value in cents,
-currency USD, and the Solana settlement signatures of every sale in the
-payload. It sends one event per day, not one per can, because the credit rating
-sums revenue per UTC day and ignores events under $10, so per-can events would
-be invisible to it.
+### 2. Purchase
 
-**Credit.** peaq aggregates those events into a Machine Credit Rating. The
-machine's screen reads it from the public MCR API.
+1. **Order.** Any message to the shop bot returns one button per catalogue item.
+   A tap creates an invoice priced from the catalogue, with a random 32-byte
+   Solana Pay reference ([`solvend/shop_bot.py`](solvend/shop_bot.py)).
+2. **Pay.** The bot replies with **Pay with Phantom** and **Pay with Solflare**.
+   These are the wallets' `https://` browse links: they open the checkout page
+   ([`docs/pay/`](docs/pay/index.html)) inside the wallet, which builds a single
+   USDC transfer with the invoice reference attached. The customer approves it
+   in their own wallet.
+3. **Verify.** Every minute the poller finds the payment by its reference, checks
+   the merchant's on-chain balance change against the invoice, and issues a
+   single-use 4-digit code to the customer's chat
+   ([`solvend/solvend.py`](solvend/solvend.py)).
+4. **Dispense.** The code is entered at the keypad. The ESP32 forwards it to the
+   Pi, which burns it atomically and commands the gantry
+   ([`solvend/solvend-serial.py`](solvend/solvend-serial.py)).
 
-## What counts as revenue
+### 3. Revenue reporting
 
-Only an invoice in `CLAIMED` state: paid *and* the drink physically collected.
-Unpaid and expired invoices are never reported. A credit rating built on
-anything looser stops meaning anything.
+The same minute poller runs [`peaq/machine.py`](peaq/machine.py) `--sync`. It
+groups dispensed sales by UTC day and, once a day reaches **$10** (the minimum
+the credit rating counts), submits **one revenue event** for that day:
 
-Reporting is **idempotent**. Every reported invoice is recorded against the
-event's transaction, keyed by invoice ID, so a retry, a restart mid-batch, or an
-operator running the sync by hand cannot double-count. Run `--sync` twice and
-the second run reports zero. A failed submission writes nothing and is retried
-on the next minute. All of this is covered by
-[`peaq/test_machine.py`](peaq/test_machine.py).
+| Field | Value |
+|---|---|
+| `value` | Day's revenue in US cents (ISO 4217 minor units) |
+| `currency` | `USD` |
+| `timestamp` | Time of the day's last sale |
+| `trust_level` | Self-reported (`0`) |
+| `source_chain_id` | `0` (off-chain); Solana is not yet a peaq source chain |
+| `raw_data` | Day, sale count, invoice IDs and **the Solana signature of every sale**, so each event can be checked against Solana |
+
+Every reported invoice is recorded against its event, keyed by invoice ID, so a
+retry, a restart or a manual run can never report a sale twice. A failed
+submission writes nothing and is retried on the next run.
+
+### 4. Credit rating and display
+
+peaq aggregates the events into the machine's Machine Credit Rating, which
+anyone can read from the public MCR API. The machine's screen
+([`tools/machine_display.py`](tools/machine_display.py)) shows the payment
+page between sales and, when idle, the machine's identity card: DID, credit
+grade and score, cans sold, revenue, and revenue reported to peaq. `/machine`
+adds the recent peaq events with explorer links.
 
 ---
 
-## Custody
+## Security model
 
-**T1: the machine holds no key that can move customer funds.** The customer's
-own wallet signs the payment. The machine only ever emits a payment *request*
-and then reads the chain to see whether it was honoured.
+**The machine holds no key that can move customer funds.** Customers sign
+their own payments; the machine only issues payment requests and reads the
+chain. Its own peaq wallet signs identity and revenue events and holds only
+PEAQ for gas.
 
-The machine does hold a key for its **own identity**, in an encrypted OWS vault
-on the Pi. That wallet signs the activation and the revenue events, and it pays
-peaq gas. It holds a few PEAQ and nothing of the customers'. The vault
-passphrase sits in the root-owned service environment file, so the machine can
-report unattended.
-
-The ESP32 holds nothing at all: no network stack, no credentials, no chain
-access. The Pi can send it exactly two things: *dispense slot N*, or *refuse*.
-Dump its flash and you get pin numbers.
-
-### No language model in the purchase
-
-The customer taps a button; [`solvend/shop_bot.py`](solvend/shop_bot.py)
-creates the invoice and replies with **Pay with Phantom / Pay with Solflare**.
-Those are the wallets' `https://` "browse" links, which open
-[`docs/pay/`](docs/pay/index.html) inside the wallet to approve one USDC
-transfer. The pay page hard-codes the merchant address and the USDC mint, so a
-tampered link cannot redirect money, and the bot refuses to start if the
-published page's address differs from the machine's.
-
-This replaced an LLM chat agent on 8 Oct 2026, after the agent's model was
-retired and its replacement answered an order with a placeholder
-(`[LINK:{uri}]`) instead of calling the invoice tool. A purchase should not
-depend on a model choosing to cooperate. The agent still serves the operator.
-
-| Attack | What happens | Why |
+| Attempt | Result | Why |
 |---|---|---|
-| Forge a button to buy at 0.01 | Invoice at the catalogue price, or nothing | The button carries only an item name; price comes from `ITEMS` |
-| Edit the amount in the pay link | Payment never settles | The machine checks the merchant's on-chain balance delta against the invoice |
-| Edit the pay link to another wallet | Not possible | Merchant and mint are constants in the page, not link parameters |
-| *"I already paid, send my code"* | Nothing | Settlement is a balance-delta check in SQL, not a judgment |
-| *"Report extra revenue to peaq"* | Nothing | Events are built from `CLAIMED` ledger rows by the poller, never from chat |
+| Forge a button to buy for less | Invoice at the catalogue price, or none | Buttons carry only an item name; prices come from `ITEMS` |
+| Edit the amount in a payment link | The payment never settles | Settlement checks the merchant's balance change against the invoice |
+| Redirect a payment link to another wallet | Not possible | The merchant address and USDC mint are constants in the checkout page, not link parameters; the bot refuses to start if the published page differs from the machine's configuration |
+| Reuse a code | Refused | Codes are burned atomically on first use and expire after 15 minutes |
+| Guess a code | Locked out | Each wrong entry counts against every live invoice's attempt budget |
+| Pay one invoice, claim another | Refused | A payment carrying one invoice's reference can never settle a different invoice |
+| Report revenue that didn't happen | Not possible | Events are built only from dispensed ledger rows by the poller |
 
-A dead model provider changes nothing a customer can see: ordering, payment
-verification, dispensing and revenue reporting all run without one.
+The ESP32 has no network stack and no credentials. The Pi can send it exactly
+two commands: dispense a slot, or refuse.
 
 ---
-
-## The machine's screen
-
-[`tools/machine_display.py`](tools/machine_display.py) runs on the Pi and is
-read-only and keyless.
-
-- `/`: the Solana Pay QR while an invoice awaits payment; otherwise the
-  machine's identity card (DID, credit grade and score, cans sold, revenue,
-  revenue reported to peaq).
-- `/machine`: the same, plus the most recent peaq events, each linked to
-  Subscan.
-- `/machine.json`: the raw numbers.
 
 ## Hardware
 
 | Part | Role |
 |---|---|
-| Raspberry Pi 4 (4GB) | Agent, ledger, chain watcher, peaq reporting, display |
-| ESP32 | Motors + keypad. No network, no keys |
+| Raspberry Pi 4 (4 GB) | Shop bot, ledger, payment verification, peaq reporting, display |
+| ESP32 | Keypad and motors; no network, no keys |
 | NEMA 17 + A4988 | Gantry positioning |
-| 2× MG996R servos | Release and present the can |
-| 16x2 I2C LCD, 4x3 keypad | Customer interface at the machine |
-| TEC1-12706 + 12V PSU | Cooling |
+| 2 × MG996R servos | Release and present the can |
+| 16×2 I²C LCD, 4×3 keypad | Customer interface at the machine |
+| TEC1-12706 + 12 V supply | Cooling |
 
-Serial protocol, 115200 8N1: `KEYPAD:<4 digits>` and `EVENT:*` up;
-`DISPENSE:drink-N`, `DENY:<reason>`, `PING` down.
+Serial protocol, 115200 8N1: `KEYPAD:<4 digits>` and `EVENT:*` from the ESP32;
+`DISPENSE:drink-N`, `DENY:<reason>` and `PING` to it.
 
----
+## Repository layout
 
-## Run it
+```
+solvend/solvend.py          state machine, ledger, on-chain payment verification
+solvend/shop_bot.py         Telegram ordering bot: buttons, invoices, wallet pay links
+solvend/solvend-serial.py   ESP32 bridge: keypad codes in, dispense commands out
+solvend/bin/solvend-poll.sh minute poller: settle, deliver codes, report revenue
+docs/pay/                   checkout page opened inside the customer's wallet
+peaq/machine.py             machine identity, revenue events, credit rating
+peaq/*.json                 activation inputs and the activation preview
+peaq/UPSTREAM-ISSUES.md     issues found in peaqOS during integration
+tools/machine_display.py    the machine's screen
+firmware/solvend_esp32/     ESP32 firmware
+deploy/                     install script and systemd units
+evidence/                   screenshots referenced by EVIDENCE.md
+```
 
-**Tests, no network or hardware needed:**
+## Running it
+
+**Tests** need no network, wallet or hardware:
 
 ```bash
 git clone https://github.com/Yahmad2601/solvend-peaq && cd solvend-peaq
-python3 solvend/test_solvend.py           # 55 passed: payments, codes, refunds, expiry
-python3 solvend/test_shop_bot.py          # 25 passed: buttons, pricing, pay links
-python3 peaq/test_machine.py              # 24 passed: cents, threshold, idempotency, cutoff
-pip install qrcode && python3 tools/test_machine_display.py   # 21 passed
+python3 solvend/test_solvend.py           # 55 tests: payments, codes, expiry, refunds
+python3 solvend/test_shop_bot.py          # 25 tests: ordering, pricing, pay links
+python3 peaq/test_machine.py              # 24 tests: cents, threshold, idempotency
+pip install qrcode && python3 tools/test_machine_display.py   # 21 tests
 ```
 
-**peaq integration** (the full path we followed, with every answer we needed
-along the way, is in [`peaq/SPIKE.md`](peaq/SPIKE.md) and
-[`peaq/DOCS-ANSWERS.md`](peaq/DOCS-ANSWERS.md)):
+**On the machine** (Raspberry Pi OS / Debian, Python ≥ 3.10):
+
+```bash
+bash deploy/pi-deploy.sh                  # installs to /opt/solvend, ledger in /var/lib/solvend
+sudo cp deploy/solvend-*.service /etc/systemd/system/
+sudo systemctl enable --now solvend-shop solvend-serial
+```
+
+**peaq identity** (once per machine):
 
 ```bash
 python3 -m venv .peaq && . .peaq/bin/activate
-pip install 'peaq-os-cli[ows]'            # prebuilt aarch64 wheels, nothing compiles
-peaqos wallet create solvend --words 24   # machine wallet, encrypted, on the device
-# .env: PEAQOS_RPC_URL, TOKENOMICS_DEPLOYMENT_ID=peaq-mainnet, PEAQOS_OWS_WALLET,
-#       PEAQOS_MCR_API_URL and the six contract addresses (see SPIKE.md)
-python3 peaq/machine.py --spike            # builds a signing client, reads chain id
-python3 peaq/machine.py --activate-preview # free: bond quote and the future machine ID
-python3 peaq/machine.py --activate         # one-time, shows terms and asks first
-python3 peaq/machine.py --status           # DID, credit rating, reported, pending
-python3 peaq/machine.py --dry-run          # what --sync would publish
-python3 peaq/machine.py --sync             # publish (the poller runs this each minute)
+pip install 'peaq-os-cli[ows]'            # prebuilt aarch64 wheels
+peaqos wallet create solvend --words 24   # encrypted machine wallet, on the device
+python3 peaq/machine.py --spike            # signing client + chain check
+python3 peaq/machine.py --activate-preview # bond quote and the resulting machine ID
+python3 peaq/machine.py --activate         # activation; shows terms before signing
+python3 peaq/machine.py --status           # DID, credit rating, reported and pending revenue
 ```
 
-Activation needs PEAQ on peaq for the bond plus gas (about 0.6 PEAQ at the time
-of writing). We bridged PEAQ from Solana with
-[Stargate](https://stargate.finance/bridge), the route peaq's DeFi guide names.
+Activation needs PEAQ on peaq for the bond and gas (about 0.6 PEAQ).
 
-**No vending hardware?** The whole money path is verifiable without it (order,
-payment, verification, code, single-use claim), and the serial protocol runs
-against a virtual port:
+### Configuration
 
-```bash
-socat -d -d pty,raw,echo=0 pty,raw,echo=0
-```
+Settings live in `/etc/solvend/env` (mode 640, `root:pi`).
 
-## Layout
+| Variable | Purpose |
+|---|---|
+| `SOLVEND_RPC_URL`, `SOLVEND_USDC_MINT`, `SOLVEND_RECIPIENT` | Solana mainnet RPC, USDC mint, merchant wallet |
+| `SOLVEND_SHOP_BOT_TOKEN`, `SOLVEND_PAY_PAGE_URL` | Shop bot token and published checkout page |
+| `PEAQOS_RPC_URL`, `TOKENOMICS_DEPLOYMENT_ID`, `PEAQOS_MCR_API_URL` | peaq mainnet RPC, `peaq-mainnet`, `https://mcr.peaq.xyz` |
+| `IDENTITY_REGISTRY_ADDRESS` … `BATCH_PRECOMPILE_ADDRESS` | peaqOS contract addresses required by the SDK client |
+| `PEAQOS_OWS_WALLET`, `OWS_PASSPHRASE` | Machine wallet and its vault passphrase |
+| `PEAQ_MACHINE_ID` | The machine's base-10 peaq ID |
+| `PEAQ_REPORT_FROM` | Unix time from which sales count as revenue |
 
-```
-peaq/machine.py             machine identity, revenue events, credit read
-peaq/test_machine.py        22 tests, fake SDK, no network
-peaq/credential-subject.json, did-document.json   the activation inputs
-peaq/DOCS-ANSWERS.md        every peaq fact we relied on, and where it came from
-peaq/UPSTREAM-ISSUES.md     bugs and gaps found in peaqOS along the way
-solvend/solvend.py          state machine, ledger, atomic single-use code burn
-solvend/test_solvend.py     50 tests, mocked RPC, no network
-solvend/solvend-serial.py   ESP32 bridge
-solvend/bin/solvend-poll.sh minute poller: settle, deliver codes, report revenue
-tools/machine_display.py    the machine's screen
-firmware/solvend_esp32/     ESP32 firmware, no Wi-Fi
-deploy/                     bootstrap, deploy, systemd units
-EVIDENCE.md                 what has been proven, with links
-```
+## Issues found in peaqOS
 
-## Honest limits
-
-- **Revenue is self-reported (trust level 0).** Sales settle on Solana, and
-  peaq's verifiable trust level needs a 32-byte source hash on a supported
-  chain. A Solana signature fits neither, so the signatures travel in the
-  event payload instead, where anyone can check them. Filed upstream
-  ([`UPSTREAM-ISSUES.md` #2](peaq/UPSTREAM-ISSUES.md)).
-- **A day under $10 does not count.** That's peaq's rule for the credit
-  rating, so slow days are held, not reported.
-- **The August sales were a devnet rehearsal and are excluded.** SolVend first
-  ran end to end on Solana devnet with faucet USDC (9 cans, 6–7 Aug 2026).
-  Those sales are real dispenses but not real money, so they are never
-  reported. `PEAQ_REPORT_FROM` is set to the moment the machine switched to
-  mainnet USDC, and both the reporter and the display ignore anything earlier.
-- **Short history.** The machine was activated on 8 Oct 2026; the credit rating
-  reflects days of trade, not months. _(update with what the rating actually
-  did)_
-- **Mainnet, not testnet.** The agung testnet has no credit-rating service, so
-  the only way to show a real rating was mainnet.
-- **The vault passphrase is on the same SD card as the vault**, protected by
-  file permissions, so the machine can report without a person present. The
-  key can only spend the machine's own PEAQ.
-- The quickstart above was followed on the machine itself, not yet repeated on
-  a clean device.
+Six issues found while integrating, from a Cloudflare rule that blocks the
+public MCR API for Python clients to documentation gaps around Tokenomics 2.0,
+are written up with reproductions in
+[`peaq/UPSTREAM-ISSUES.md`](peaq/UPSTREAM-ISSUES.md).
 
 ## License
 

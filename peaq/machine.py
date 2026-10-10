@@ -1,60 +1,47 @@
 #!/usr/bin/env python3
 """SolVend's peaq machine identity and revenue reporting.
 
-The seam between the vending machine and the Machine Economy. SolVend's ledger
-already records every invoice it settles; this module gives the machine an
-on-chain identity and publishes those settlements as revenue events, so its
-Machine Credit Rating is built from real trade.
+Gives the vending machine an on-chain identity on peaq and publishes its sales
+as revenue events, so its Machine Credit Rating is built from real trade.
 
-DESIGN RULE INHERITED FROM solvend.py: no model in the money path. This is
-called from the settlement path, never from the agent. A dead model provider
-must not stop revenue reporting.
+Called by the minute poller (solvend/bin/solvend-poll.sh), never by a chat or a
+model: a sale is reported because the ledger says it was paid and dispensed.
 
-THREE THINGS peaq DICTATES, ALL EASY TO GET WRONG
--------------------------------------------------
-1. `value` is in ISO 4217 *minor units* — CENTS, not token base units.
-   SolVend's ledger stores USDC base units at 6 decimals, so a 1.50 drink is
-   1_500_000 there and **150** here. Passing the raw base amount would report a
-   $15,000 sale and make the rating meaningless.
+Reporting rules
+---------------
+1. `value` is in ISO 4217 minor units (US cents). The ledger stores USDC base
+   units (6 decimals), so a 1.50 drink is 1_500_000 there and 150 here.
+2. The Machine Credit Rating counts only revenue events of at least 1,000 cents
+   ($10) and sums revenue per UTC day. Sales are therefore aggregated into one
+   event per UTC day, submitted once that day reaches $10.
+3. `source_tx_hash` accepts only a 32-byte hex hash, and Solana is not a
+   supported source chain, so events are self-reported (trust level 0) with
+   `source_chain_id=0`. The Solana signature of every sale travels in
+   `raw_data`, so each event can be checked against Solana.
+4. Idempotent: every reported invoice is recorded against its event, keyed by
+   invoice ID. A retry, restart or manual run never reports a sale twice.
 
-2. The Machine Credit Rating ignores revenue events below **1,000 cents ($10)**,
-   and scoring "factors daily aggregation — events are summed per UTC day, and
-   only days meeting a minimum economic threshold count." So we aggregate
-   **one event per UTC day**, submitted once that day clears $10. At 1.50 a can
-   that is 7 sales in a day. Every covered invoice is recorded against the
-   transaction, so nothing double-counts and nothing is silently dropped.
+Usage
+-----
+    python3 peaq/machine.py --spike             # build a signing client, read chain id
+    python3 peaq/machine.py --activate-preview  # bond quote and machine ID, signs nothing
+    python3 peaq/machine.py --activate          # one-time: activate the machine identity
+    python3 peaq/machine.py --sync              # publish every UTC day that reached $10
+    python3 peaq/machine.py --dry-run           # show what --sync would publish
+    python3 peaq/machine.py --status            # DID, credit rating, reported, pending
 
-3. `source_tx_hash` must be 0x-prefixed 32-byte hex (66 chars). **A Solana
-   base58 signature does not fit**, and trust level 1 (on-chain verifiable)
-   requires that field. So events are submitted at TRUST_SELF_REPORTED with the
-   Solana settlement signature carried in `raw_data` instead — the audit trail
-   survives even though peaq cannot verify it natively.
-   → This is a real limitation worth reporting upstream: peaq's cross-chain
-     audit trail documents peaq (3338) and Base (8453); a Solana-settled machine
-     cannot currently claim on-chain-verifiable trust.
-
-IDEMPOTENCY IS THE WHOLE GAME. A retry, a restart mid-batch, or an operator
-running this by hand must never double-report. An inflated score built on
-duplicates is worse than no score at all.
-
-    python3 peaq/machine.py --spike      # build a signing client, read chain id
-    python3 peaq/machine.py --activate-preview   # free dry run, signs nothing
-    python3 peaq/machine.py --activate   # one-time: mint the machine identity
-    python3 peaq/machine.py --sync       # publish any UTC day that cleared $10
-    python3 peaq/machine.py --dry-run    # show what WOULD be published
-    python3 peaq/machine.py --status     # DID, credit, reported, pending
-
-Env (via /etc/solvend/env with `set -a`, or the repo-root .env):
-    PEAQOS_RPC_URL            https://quicknode1.peaq.xyz  (peaq mainnet, 3338)
-    PEAQOS_OWS_WALLET         OWS vault wallet name (`solvend`) — the machine's
-                              own wallet, NEVER the merchant wallet
-    OWS_PASSPHRASE            unlocks it; read by PeaqosClient.from_wallet()
-    TOKENOMICS_DEPLOYMENT_ID  peaq-mainnet (agung has no MCR — DOCS-ANSWERS.md)
+Environment (/etc/solvend/env, or a repo-root .env for manual runs)
+-----------
+    PEAQOS_RPC_URL            peaq mainnet RPC (chain 3338)
+    PEAQOS_OWS_WALLET         the machine's own OWS wallet (never the merchant's)
+    OWS_PASSPHRASE            vault passphrase, read by PeaqosClient.from_wallet()
+    TOKENOMICS_DEPLOYMENT_ID  peaq-mainnet (the deployment with a credit rating service)
     PEAQOS_MCR_API_URL        https://mcr.peaq.xyz
     IDENTITY_REGISTRY_ADDRESS, IDENTITY_STAKING_ADDRESS, EVENT_REGISTRY_ADDRESS,
     MACHINE_NFT_ADDRESS, DID_REGISTRY_ADDRESS, BATCH_PRECOMPILE_ADDRESS
-                              required by the client constructor
-    PEAQ_MACHINE_ID           base-10 machine ID, recorded after --activate
+                              contract addresses required by the client
+    PEAQ_MACHINE_ID           base-10 machine ID, from activation
+    PEAQ_REPORT_FROM          Unix time from which sales count as revenue
     SOLVEND_DB                ledger path (default /var/lib/solvend/solvend.db)
 """
 import datetime as dt
@@ -81,10 +68,8 @@ DEPLOYMENT_ID = os.environ.get("TOKENOMICS_DEPLOYMENT_ID", "peaq-mainnet")
 MCR_API_URL = os.environ.get("PEAQOS_MCR_API_URL", "https://mcr.peaq.xyz")
 WALLET = os.environ.get("PEAQOS_OWS_WALLET", "solvend")
 MACHINE_ID = os.environ.get("PEAQ_MACHINE_ID", "")
-# Only sales claimed at or after this Unix time are revenue. The ledger also
-# holds devnet rehearsal sales paid in faucet USDC; reporting those to peaq
-# mainnet as USD revenue would be fabricated revenue. Set it to the moment the
-# machine switched to mainnet USDC. 0 = no cutoff (tests, fresh ledgers).
+# Only sales claimed at or after this Unix time are revenue; earlier ledger rows
+# are pre-production test data. 0 = no cutoff (tests, fresh ledgers).
 REPORT_FROM = int(os.environ.get("PEAQ_REPORT_FROM", "0") or 0)
 # Tokenomics mode DID is "did:peaq:" + the base-10 machine ID (query_mcr docstring).
 MACHINE_DID = f"did:peaq:{MACHINE_ID}" if MACHINE_ID else ""
@@ -93,12 +78,12 @@ USDC_DECIMALS = 6          # SolVend ledger precision
 MIN_REVENUE_CENTS = 1000   # peaq: a day below $10 does not count toward the MCR
 CURRENCY = "USD"           # ISO 4217; value is in minor units of this
 # Solana is not a supported source chain, so a Solana-settled sale is reported
-# as off-chain (0) with no source_tx_hash. Verified, DOCS-ANSWERS.md.
+# as off-chain (0) with no source_tx_hash (rule 3 above).
 SOURCE_CHAIN_OFFCHAIN = 0
 METADATA = b'{"schema":"solvend.revenue.v1"}'   # metadata is required; max 4096 B
 
-# Permanent identity inputs, validated by a mainnet dry run on 8 Oct 2026.
-# machine_type + credential_subject fix the machine ID forever. Never edit.
+# Permanent identity inputs: machine_type + credential_subject determine the
+# machine ID, which cannot change after activation. Never edit.
 MACHINE_TYPE = "VendingMachine"
 TIER = "entry"
 CREDENTIAL_SUBJECT_FILE = os.path.join(HERE, "credential-subject.json")
@@ -121,50 +106,26 @@ def utc_day(epoch_secs):
 
 
 # ---------------------------------------------------------------------------
-# SDK boundary — the only part the Day 1 spike changes. See peaq/SPIKE.md.
-#
-# Verified by inspect.signature() on the Pi, peaq-os-cli 0.0.15 / SDK 0.11.0
-# (7 Oct 2026). peaq_os_sdk has no __version__; use `peaqos --version`.
+# SDK boundary (peaq-os-cli 0.0.15 / peaq_os_sdk 0.11.0)
 #
 #   PeaqosClient.from_wallet(name_or_id, passphrase=None, ows_signing=True,
 #                            vault_path=None, **config_kwargs)
-#       passphrase falls back to OWS_PASSPHRASE. NOT verified at construction:
-#       a wrong passphrase only surfaces on the first signature.
-#   client.activate_machine(params: ActivateMachineParams) -> ActivateMachineResult
-#       raises TokenomicsConfigError if the client has no tokenomics20.
+#       Signs through the OWS vault; the raw key never enters this process.
+#       The passphrase falls back to OWS_PASSPHRASE and is only checked on
+#       the first signature.
+#   config_kwargs: rpc_url, identity_registry, identity_staking,
+#       event_registry, machine_nft, did_registry, batch_precompile, api_url,
+#       tokenomics20=Tokenomics20Config(deployment_id=...)
 #   client.submit_event(*, machine_id: int, event_type: int, value: int,
 #                       timestamp: int, raw_data: bytes|None, trust_level: int,
 #                       source_chain_id: int, source_tx_hash: Hex32|None,
-#                       metadata: bytes, currency: str|None) -> (str, bytes)
-#       value is an ISO 4217 subunit int; float/Decimal/str/None -> TypeError.
-#       machine_id is an INT. MACHINE_ID above is a str from env: cast it.
-#   client.query_mcr(...) reads the credit rating. PEAQOS_MCR_API_URL defaults
-#       to http://127.0.0.1:8000. Only https://mcr.peaq.xyz is documented, and
-#       it is the peaq-mainnet host. UNVERIFIED: whether agung has an MCR at
-#       all (docs: agung-2026-08-28 -> DEPLOYMENT_UNAVAILABLE, "no paired MCR").
+#                       metadata: bytes, currency: str|None) -> (tx_hash, data_hash)
+#       value must be an int (float/Decimal/str raise TypeError).
+#   client.query_mcr(did) -> MCRResponse
+#       did is "did:peaq:" + the base-10 machine ID.
 #   EVENT_TYPE_REVENUE == 0, TRUST_SELF_REPORTED == 0
-#   SUPPORTED_CHAINS == {peaq:3338, ethereum:1, base:8453, polygon:137,
-#                        arbitrum:42161, optimism:10}   (no Solana, no agung)
-#   Solana-settled revenue: source_chain_id=0 (off-chain), source_tx_hash=None,
-#       trust_level=TRUST_SELF_REPORTED. Verified, DOCS-ANSWERS.md.
-#
-# from_wallet config_kwargs (docs example): rpc_url, identity_registry,
-#   identity_staking, event_registry, machine_nft, did_registry,
-#   batch_precompile.
-# Verified on the Pi 8 Oct 2026 (--spike: "client ok", chain_id 3338): this
-#   from_wallet call, Address-wrapped contracts and tokenomics20 construct a
-#   working client. --activate-preview through it gives the same machine ID.
-# Verified 8 Oct 2026 after activation: --status reads the MCR through this
-#   client (Provisioned, bonded), so api_url / the deployment MCR is right.
-# UNVERIFIED until the first real event: that the submit_event metadata bytes
-#   below are accepted as-is.
-# Activate against Economics 2.0 (kwarg verified from PeaqosClient.__init__):
-#   tokenomics20=Tokenomics20Config(deployment_id=DEPLOYMENT_ID)
-#   deployment_id is one of "agung-2026-08-28" | "peaq-mainnet". Only
-#   peaq-mainnet carries an MCR api_base (https://mcr.peaq.xyz) in the SDK.
-#   ActivateMachineParams: machine_type + credential_subject bytes fix the
-#   PERMANENT machine ID. Choose them once, deliberately.
-#   Tokenomics-mode DID for query_mcr: "did:peaq:" + base-10 machine ID.
+#   Only the peaq-mainnet deployment has a credit rating service
+#   (api_base https://mcr.peaq.xyz); the agung testnet deployment has none.
 # ---------------------------------------------------------------------------
 
 _client_cache = None
@@ -435,7 +396,7 @@ def spike():
         report["sdk"] = "client ok"
     except Exception as e:                          # noqa: BLE001
         report["sdk"] = f"FAILED: {type(e).__name__}: {e}"[:200]
-        report["next"] = "see peaq/SPIKE.md fallback ladder"
+        report["next"] = "check PEAQOS_* settings and the OWS wallet"
     return report
 
 

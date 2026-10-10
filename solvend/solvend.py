@@ -50,10 +50,9 @@ ITEMS = {
     "energy": {"price_base": 2_500_000, "slot": "drink-3"},
 }
 OTP_TTL_SECS = 15 * 60
-# An invoice nobody paid is closed after this. Before 2026-10-08 unpaid invoices
-# lived forever, and the exact-amount fallback binds the OLDEST open invoice
-# first, so a two-month-old water invoice would have captured the next 1.00
-# payment anyone made and sent its code to a stale chat.
+# An invoice nobody paid is closed after this. The exact-amount fallback binds
+# the OLDEST open invoice first, so a stale unpaid invoice must not stay open
+# long enough to capture a later customer's payment.
 UNPAID_TTL_SECS = 30 * 60
 MAX_OTP_ATTEMPTS = 5          # per invoice, then the OTP is dead
 RPC_TIMEOUT_SECS = 10

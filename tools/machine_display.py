@@ -56,8 +56,8 @@ MCR_CACHE_SECS = 60         # the screen refreshes every 5 s; the MCR does not n
 # /tx/<0x hash> path was verified on the activation tx, 8 Oct 2026.
 EXPLORER = os.environ.get("PEAQ_EXPLORER_URL", "https://peaq.subscan.io")
 MIN_REVENUE_CENTS = 1000    # mirrors peaq/machine.py: a day below $10 is held
-# Mirrors peaq/machine.py: sales before the mainnet switch were devnet
-# rehearsals in faucet USDC and are not revenue. 0 = count everything.
+# Mirrors peaq/machine.py: sales before this time are pre-production test
+# data and are not revenue. 0 = count everything.
 REPORT_FROM = int(os.environ.get("PEAQ_REPORT_FROM", "0") or 0)
 
 

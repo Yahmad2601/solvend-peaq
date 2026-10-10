@@ -318,8 +318,8 @@ r = solvend.cmd_watch(fallback_transport([pay("FB8")]))
 check("fallback keeps the watch payload small", len(json.dumps(r)) < 400)
 
 print("\nstale invoices — an old unpaid invoice must not capture a new payment")
-# Found 2026-10-08: two-month-old AWAITING_PAYMENT water invoices were still
-# open, and the fallback binds oldest-first.
+# The fallback binds oldest-first, so an expired invoice must be closed before
+# discovery runs.
 fresh()                                             # INV-0001, REF1, cola
 with solvend.db() as c:
     c.execute("UPDATE invoices SET created_at=? WHERE invoice_id='INV-0001'",

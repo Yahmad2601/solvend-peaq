@@ -1,25 +1,22 @@
-# Issues found while integrating peaqOS: drafts to file with peaq
+# Issues found in peaqOS
 
-Found while taking a real vending machine (SolVend) from zero to an activated,
-revenue-reporting machine on peaq mainnet, 6–8 Oct 2026. Each issue below is
-self-contained so it can be pasted as-is.
+Found while taking SolVend from a fresh install to an activated,
+revenue-reporting machine on peaq mainnet (6–9 Oct 2026). Each issue is
+self-contained, with a reproduction and a suggested fix.
 
-**Environment for all of them:** `peaq-os-cli 0.0.15 (peaq_os_sdk 0.11.0)`,
-Python 3.13.5, Debian 13 (trixie) on a Raspberry Pi 4 (`aarch64`), installed
-with `pip install 'peaq-os-cli[ows]'`. Network: `peaq-mainnet` (chain 3338)
-unless stated.
+**Environment:** `peaq-os-cli 0.0.15 (peaq_os_sdk 0.11.0)`, Python 3.13.5,
+Debian 13 (trixie) on a Raspberry Pi 4 (`aarch64`), installed with
+`pip install 'peaq-os-cli[ows]'`. Network `peaq-mainnet` (chain 3338) unless
+stated.
 
-**Where filed:** _(ask in the peaq Discord for the right repo or tracker, then
-record each link here and in `EVIDENCE.md` claim 10)_
-
-| # | Title | Kind | Filed |
-|---|---|---|---|
-| 1 | MCR API returns 403 (Cloudflare 1010) to Python's default User-Agent | bug | ☐ |
-| 2 | Solana-settled revenue cannot be reported as on-chain verifiable | feature gap | ☐ |
-| 3 | Python Tokenomics 2.0 surface is missing from the docs | docs | ☐ |
-| 4 | `--did-document`: `publicKeyMultibase` required by the CLI, "N/A for EVM" in docs | docs/CLI mismatch | ☐ |
-| 5 | `peaqos activate --tier` help shows `ENTRY`, but only `entry` is accepted | CLI bug | ☐ |
-| 6 | `peaqos wallet create` silently uses `OWS_PASSPHRASE`; docs say it always prompts | docs bug | ☐ |
+| # | Title | Kind |
+|---|---|---|
+| 1 | MCR API returns 403 (Cloudflare 1010) to Python's default User-Agent | Bug |
+| 2 | Solana-settled revenue cannot be reported as on-chain verifiable | Feature gap |
+| 3 | Python Tokenomics 2.0 surface is missing from the docs | Documentation |
+| 4 | `--did-document`: `publicKeyMultibase` required by the CLI, "N/A for EVM" in docs | Docs / CLI mismatch |
+| 5 | `peaqos activate --tier` help shows `ENTRY`, but only `entry` is accepted | CLI bug |
+| 6 | `peaqos wallet create` silently uses `OWS_PASSPHRASE`; docs say it always prompts | Documentation |
 
 ---
 
@@ -179,7 +176,7 @@ and prompts otherwise.
 
 ---
 
-## Minor, mention if there's a general feedback channel
+## Minor observations
 
 - `peaq_os_sdk.__version__` is not defined. Only `peaqos --version` reports
   the SDK version.

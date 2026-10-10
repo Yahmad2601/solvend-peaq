@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """SolVend shop bot: tap a drink, get a pay button. No model in the purchase.
 
-Replaces the chat agent on the customer channel (2026-10-08). The agent was
-asked to call an invoice tool and paste the URI it returned; after Groq retired
-its model, the replacement skipped the tool and replied "[LINK:{uri}]" with no
-invoice behind it. A purchase must not depend on a model choosing to cooperate.
+Every step a customer depends on (invoice creation, pricing, the payment link)
+is deterministic code, so ordering cannot be affected by a language model or
+its provider's availability.
 
 Flow:
   any message      -> menu: one button per catalogue item

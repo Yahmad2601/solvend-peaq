@@ -143,7 +143,7 @@ check("no ledger rows written on failure", n == 0)
 out = machine.sync()
 check("next run submits the day exactly once", out["submitted"] == 1 and len(SUBMITTED) == 1)
 
-print("\ncutoff — devnet rehearsal sales are never revenue")
+print("\ncutoff — sales before PEAQ_REPORT_FROM are never revenue")
 reset()
 for i in range(7):
     sale(500 + i, "cola", DAY1 + i)                 # before the mainnet switch

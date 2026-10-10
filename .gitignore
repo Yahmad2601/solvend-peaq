@@ -21,6 +21,8 @@ __pycache__/
 # peaqOS CLI audit log, written to the working directory
 peaqos.log
 *.png
+# ...except the evidence judges need to see (each file reviewed for secrets)
+!evidence/*.png
 
 # Editor / OS
 .vscode/

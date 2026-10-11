@@ -67,7 +67,12 @@ def handle_keypad(ser, otp: str) -> None:
 
 
 def send(ser, line: str) -> None:
-    ser.write((line + "\n").encode("ascii", "ignore"))
+    # Leading newline: the firmware accumulates bytes until '\n' and acts only on
+    # lines that START with a command. Any stray bytes already in its buffer
+    # (line noise around port open / ESP32 reset) would otherwise prefix the
+    # command and get it ignored. The newline flushes them as a separate line,
+    # which the firmware discards as empty or unknown.
+    ser.write(("\n" + line + "\n").encode("ascii", "ignore"))
     ser.flush()
 
 

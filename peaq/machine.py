@@ -321,8 +321,8 @@ def sync(dry_run=False):
             "submitted": 0,
             "holding": holding,
             "threshold_cents": MIN_REVENUE_CENTS,
-            "note": ("no UTC day has cleared $10 yet. peaq sums events per UTC "
-                     "day and ignores days below the economic threshold."),
+            "note": ("no unreported UTC day has reached $10. peaq sums events "
+                     "per UTC day and ignores days below the economic threshold."),
         }
 
     if dry_run:

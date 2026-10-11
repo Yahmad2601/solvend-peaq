@@ -14,8 +14,8 @@ or a screenshot in [`evidence/`](evidence/).
 | 4 | No model in the purchase path | Button ordering, deterministic invoice and pay link ([`20`](evidence/20-telegram-buttons.jpg)–[`24`](evidence/24-telegram-code.jpg)) | ✅ |
 | 5 | The peaq SDK runs on the device, unattended | `client ok` from a stripped scheduler-like environment ([`13`](evidence/13-spike-client-ok.png)) | ✅ |
 | 6 | Revenue events are reported automatically | [First revenue event](https://peaq.subscan.io/tx/0xcffb1c93141bad7ee1e392415722a2cf5a42a616dd9f6c0936e6bf767facf917): $12.00 from 11 dispensed sales, submitted by the poller with no human action | ✅ |
-| 7 | The Machine Credit Rating responds to revenue | Rating before and after the first event | Before ✅ · After pending |
-| 8 | Reporting never double-counts | `--sync` run twice, second reports 0; covered by tests | ✅ tests · live run pending |
+| 7 | The Machine Credit Rating responds to revenue | MCR record before and after the first event: `revenue_event_count` 0 → 1, `total_revenue` 0 → 1200 ¢ | ✅ |
+| 8 | Reporting never double-counts | Manual `--sync` after the poller's submission reports `"submitted": 0`; covered by tests | ✅ |
 | 9 | The test suites pass | 127 tests across four suites | ✅ |
 | 10 | Issues found in peaqOS are documented | [`peaq/UPSTREAM-ISSUES.md`](peaq/UPSTREAM-ISSUES.md) | ✅ documented |
 
@@ -148,7 +148,12 @@ Read from the public endpoint `GET https://mcr.peaq.xyz/mcr/{did}`.
 | | Rating | Score | Bond | Revenue events | Trend |
 |---|---|---|---|---|---|
 | After activation (8 Oct) | Provisioned | 0 | bonded | 0 | insufficient |
-| After first revenue event | *pending* | | | | |
+| After first revenue event (11 Oct) | Provisioned | 0 | bonded | 1 (total_revenue 1200 ¢, last_updated 2026-10-11T21:42:24Z) | insufficient |
+
+The rating service recorded the event within minutes: `event_count` 1,
+`revenue_event_count` 1, `total_revenue` 1200 cents, and `last_updated`
+matching the day's last sale. The letter grade and trend are computed from
+multiple qualifying days and update as daily revenue history accumulates.
 
 ## 6. Revenue events
 
@@ -180,6 +185,19 @@ Each of the 11 sales was physically dispensed. For INV-0031 – INV-0040 the
 serial bridge logged `DISPENSE drink-N invoice=INV-…` followed by
 `gantry completed drink-N`; INV-0030's can was delivered by a direct
 `DISPENSE:drink-1` command to the ESP32 (`EVENT:DISPENSED:drink-1`).
+
+**No double-counting.** Running `--sync` by hand after the poller's submission
+reports nothing new; the 11 sales are already recorded against the event, and
+only a $1.00 day below the threshold remains held:
+
+```
+$ python3 peaq/machine.py --sync
+{
+  "submitted": 0,
+  "holding": { "2026-10-09": 100 },
+  "threshold_cents": 1000
+}
+```
 
 ## 7. Tests
 

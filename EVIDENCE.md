@@ -10,7 +10,7 @@ or a screenshot in [`evidence/`](evidence/).
 |---|---|---|---|
 | 1 | SolVend runs on real hardware | Device model and OS from the Pi ([`01`](evidence/01-pi-hardware.png)) | ✅ |
 | 2 | The machine has a peaq identity on mainnet | [Activation transaction](https://peaq.subscan.io/tx/0xdeab1fed124579378f9558e55861772729ec37ac4b99841cd65e53865ed50b77), DID, identity NFT ([`12`](evidence/12-activation-subscan.png)) | ✅ |
-| 3 | Customers pay real USDC on Solana mainnet | [First sale on Solscan](https://solscan.io/tx/ZF3QEkkNcRV6tVU1c1pV3pTdr4CGmdj5td4x7xeTiS4XuNEYWendSKAo7FTry5tQygMw6FAc6Phwke9eUfoGNyi), merchant +1.00 USDC | ✅ |
+| 3 | Purchases settle in real USDC on Solana mainnet | [First sale on Solscan](https://solscan.io/tx/ZF3QEkkNcRV6tVU1c1pV3pTdr4CGmdj5td4x7xeTiS4XuNEYWendSKAo7FTry5tQygMw6FAc6Phwke9eUfoGNyi), merchant +1.00 USDC | ✅ |
 | 4 | No model in the purchase path | Button ordering, deterministic invoice and pay link ([`20`](evidence/20-telegram-buttons.jpg)–[`24`](evidence/24-telegram-code.jpg)) | ✅ |
 | 5 | The peaq SDK runs on the device, unattended | `client ok` from a stripped scheduler-like environment ([`13`](evidence/13-spike-client-ok.png)) | ✅ |
 | 6 | Revenue events are reported automatically | [First revenue event](https://peaq.subscan.io/tx/0xcffb1c93141bad7ee1e392415722a2cf5a42a616dd9f6c0936e6bf767facf917): $12.00 from 11 dispensed sales, submitted by the poller with no human action | ✅ |
@@ -104,6 +104,13 @@ machine's `EcdsaSecp256k1RecoveryMethod2020` key and a link to this repository.
 ## 4. First mainnet sale
 
 INV-0027, water, 1.00 USDC, 9 Oct 2026 22:09 UTC.
+
+**Buyer.** All purchases to date (INV-0027 and INV-0030 – INV-0040) were made
+by the builder, paying from a Solana wallet separate from the merchant wallet,
+to exercise the complete production path on mainnet: real USDC, on-chain
+verification, single-use codes, physical dispensing and revenue reporting. The
+machine applies identical rules to every buyer; nothing in the path
+distinguishes these purchases from any other customer's.
 
 1. The customer taps **Water** in the shop bot
    ([`20-telegram-buttons.jpg`](evidence/20-telegram-buttons.jpg)).
@@ -201,7 +208,8 @@ $ python3 peaq/machine.py --sync
 
 ## 7. Tests
 
-Run 11 Oct 2026 (Python 3.12):
+Run 11 Oct 2026 on the development laptop (Python 3.12) and on the machine's
+Raspberry Pi (Python 3.13), with identical results:
 
 | Suite | Covers | Result |
 |---|---|---|

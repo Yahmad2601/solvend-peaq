@@ -17,6 +17,8 @@ its **Machine Credit Rating is built from real trade**, not simulated telemetry.
 | **Activation** | [`0xdeab1fed…ed50b77`](https://peaq.subscan.io/tx/0xdeab1fed124579378f9558e55861772729ec37ac4b99841cd65e53865ed50b77) on Subscan: Entry tier, 0.495 PEAQ bond, identity NFT |
 | **Credit rating** | [Live from the MCR API](https://mcr.peaq.xyz/mcr/did:peaq:8600820691859294852796023821329786994502637838982221572620760063908348418155) (public, no key) |
 | **First sale** | [1.00 USDC on Solana mainnet](https://solscan.io/tx/ZF3QEkkNcRV6tVU1c1pV3pTdr4CGmdj5td4x7xeTiS4XuNEYWendSKAo7FTry5tQygMw6FAc6Phwke9eUfoGNyi) |
+| **First revenue event** | [$12.00 from 11 dispensed sales](https://peaq.subscan.io/tx/0xcffb1c93141bad7ee1e392415722a2cf5a42a616dd9f6c0936e6bf767facf917), submitted automatically |
+| **Sales to date** | 12 mainnet purchases (9–11 Oct 2026), made by the builder from a wallet separate from the merchant's, to run the complete production path end to end |
 | **Network** | peaq mainnet (chain 3338), `peaq-mainnet` Economics 2.0 deployment |
 | **Demo video** | _(link)_ |
 | **Evidence** | [`EVIDENCE.md`](EVIDENCE.md): every claim with a verifiable artifact |

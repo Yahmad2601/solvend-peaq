@@ -126,7 +126,8 @@ def ledger_snapshot(now=None):
                              " FROM peaq_events").fetchone()
             snap["reported_sales"], snap["reported_cents"] = r
             snap["events"] = [
-                {"tx_hash": tx, "day": day, "cents": cents, "sales": n, "at": at}
+                {"tx_hash": tx if tx.startswith("0x") else "0x" + tx,
+                 "day": day, "cents": cents, "sales": n, "at": at}
                 for tx, day, cents, n, at in conn.execute(
                     "SELECT tx_hash, utc_day, SUM(cents), COUNT(*), MAX(submitted_at)"
                     " FROM peaq_events GROUP BY tx_hash"

@@ -13,10 +13,10 @@ or a screenshot in [`evidence/`](evidence/).
 | 3 | Customers pay real USDC on Solana mainnet | [First sale on Solscan](https://solscan.io/tx/ZF3QEkkNcRV6tVU1c1pV3pTdr4CGmdj5td4x7xeTiS4XuNEYWendSKAo7FTry5tQygMw6FAc6Phwke9eUfoGNyi), merchant +1.00 USDC | ✅ |
 | 4 | No model in the purchase path | Button ordering, deterministic invoice and pay link ([`20`](evidence/20-telegram-buttons.jpg)–[`24`](evidence/24-telegram-code.jpg)) | ✅ |
 | 5 | The peaq SDK runs on the device, unattended | `client ok` from a stripped scheduler-like environment ([`13`](evidence/13-spike-client-ok.png)) | ✅ |
-| 6 | Revenue events are reported automatically | First daily revenue event on peaq | Pending (sales day) |
+| 6 | Revenue events are reported automatically | [First revenue event](https://peaq.subscan.io/tx/0xcffb1c93141bad7ee1e392415722a2cf5a42a616dd9f6c0936e6bf767facf917): $12.00 from 11 dispensed sales, submitted by the poller with no human action | ✅ |
 | 7 | The Machine Credit Rating responds to revenue | Rating before and after the first event | Before ✅ · After pending |
 | 8 | Reporting never double-counts | `--sync` run twice, second reports 0; covered by tests | ✅ tests · live run pending |
-| 9 | The test suites pass | 125 tests across four suites | ✅ |
+| 9 | The test suites pass | 127 tests across four suites | ✅ |
 | 10 | Issues found in peaqOS are documented | [`peaq/UPSTREAM-ISSUES.md`](peaq/UPSTREAM-ISSUES.md) | ✅ documented |
 
 ---
@@ -157,18 +157,40 @@ rating counts.
 
 | UTC day | Sales | Revenue | peaq transaction |
 |---|---|---|---|
-| *pending* | | | |
+| 2026-10-11 | 11 (INV-0030 – INV-0040: 9 water, 2 cola) | $12.00 | [`0xcffb1c93…7facf917`](https://peaq.subscan.io/tx/0xcffb1c93141bad7ee1e392415722a2cf5a42a616dd9f6c0936e6bf767facf917) |
+
+**First event, submitted autonomously.** No command was run: the minute poller
+detected that 2026-10-11 had reached $10 and submitted the event on its own.
+Excerpt from the machine's system log (`journalctl -t solvend-peaq`, WAT = UTC+1):
+
+```
+Oct 11 23:02:49 solvend solvend-peaq[17991]:   "submitted": 1,
+Oct 11 23:02:49 solvend solvend-peaq[17991]:       "day": "2026-10-11",
+Oct 11 23:02:49 solvend solvend-peaq[17991]:       "sales": 11,
+Oct 11 23:02:49 solvend solvend-peaq[17991]:       "cents": 1200,
+Oct 11 23:02:49 solvend solvend-peaq[17991]:       "tx_hash": "cffb1c93141bad7ee1e392415722a2cf5a42a616dd9f6c0936e6bf767facf917"
+Oct 11 23:02:49 solvend solvend-peaq[17991]:   "errors": []
+```
+
+Verified on peaq mainnet via `eth_getTransactionReceipt`: status **success**,
+from the machine's wallet `0x6090…2996` to **EventRegistry (2.0)**
+`0xa1e7…5ad1e`, block 11,947,538, one event log emitted.
+
+Each of the 11 sales was physically dispensed. For INV-0031 – INV-0040 the
+serial bridge logged `DISPENSE drink-N invoice=INV-…` followed by
+`gantry completed drink-N`; INV-0030's can was delivered by a direct
+`DISPENSE:drink-1` command to the ESP32 (`EVENT:DISPENSED:drink-1`).
 
 ## 7. Tests
 
-Run 10 Oct 2026 (Python 3.12):
+Run 11 Oct 2026 (Python 3.12):
 
 | Suite | Covers | Result |
 |---|---|---|
 | `solvend/test_solvend.py` | Payment verification, anti-spoofing, single-use codes, expiry, refunds | 55 passed |
 | `solvend/test_shop_bot.py` | Button ordering, catalogue pricing, pay links, pay-page integrity | 25 passed |
-| `peaq/test_machine.py` | Cents conversion, daily threshold, idempotency, event fields | 24 passed |
-| `tools/test_machine_display.py` | Ledger reads, credit rating, rendering, HTTP | 21 passed |
+| `peaq/test_machine.py` | Cents conversion, daily threshold, idempotency, event fields | 25 passed |
+| `tools/test_machine_display.py` | Ledger reads, credit rating, rendering, HTTP | 22 passed |
 
 The checkout page's transaction builder is additionally verified against the
 pinned `@solana/web3.js` build: it derives the merchant's real on-chain USDC
@@ -176,5 +198,5 @@ account and attaches the invoice reference as a read-only key.
 
 ## 8. Issues found in peaqOS
 
-Six issues found during integration, written up for the peaq team in
+Seven issues found during integration, written up for the peaq team in
 [`peaq/UPSTREAM-ISSUES.md`](peaq/UPSTREAM-ISSUES.md).

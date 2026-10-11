@@ -84,6 +84,13 @@ check("one event row per tx, sales grouped",
       len(snap["events"]) == 1 and snap["events"][0]["sales"] == 2
       and snap["events"][0]["cents"] == 400)
 check("nothing pending", snap["pending_cents"] == 0)
+with sqlite3.connect(md.DB) as c:
+    c.execute("INSERT INTO peaq_events VALUES (?,?,?,?,?,?)",
+              ("INV-X", "m", "2026-10-11", 0, "cd" * 32, NOW + 1))
+check("a stored hash without 0x is shown with it",
+      md.ledger_snapshot(now=NOW)["events"][0]["tx_hash"] == "0x" + "cd" * 32)
+with sqlite3.connect(md.DB) as c:
+    c.execute("DELETE FROM peaq_events WHERE invoice_id='INV-X'")
 
 print("\ncredit rating — public MCR, cached")
 calls = []

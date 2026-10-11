@@ -174,8 +174,8 @@ evidence/                   screenshots referenced by EVIDENCE.md
 git clone https://github.com/Yahmad2601/solvend-peaq && cd solvend-peaq
 python3 solvend/test_solvend.py           # 55 tests: payments, codes, expiry, refunds
 python3 solvend/test_shop_bot.py          # 25 tests: ordering, pricing, pay links
-python3 peaq/test_machine.py              # 24 tests: cents, threshold, idempotency
-pip install qrcode && python3 tools/test_machine_display.py   # 21 tests
+python3 peaq/test_machine.py              # 25 tests: cents, threshold, idempotency
+pip install qrcode && python3 tools/test_machine_display.py   # 22 tests
 ```
 
 **On the machine** (Raspberry Pi OS / Debian, Python ≥ 3.10):
@@ -216,7 +216,7 @@ Settings live in `/etc/solvend/env` (mode 640, `root:pi`).
 
 ## Issues found in peaqOS
 
-Six issues found while integrating, from a Cloudflare rule that blocks the
+Seven issues found while integrating, from a Cloudflare rule that blocks the
 public MCR API for Python clients to documentation gaps around Tokenomics 2.0,
 are written up with reproductions in
 [`peaq/UPSTREAM-ISSUES.md`](peaq/UPSTREAM-ISSUES.md).

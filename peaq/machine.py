@@ -219,7 +219,10 @@ def peaq_submit_revenue(machine_id, cents, timestamp, raw_data):
         metadata=METADATA,
         currency=CURRENCY,
     )
-    return tx_hash
+    # The SDK returns the hash without the 0x prefix; explorers and the display
+    # expect it with one.
+    tx_hash = str(tx_hash)
+    return tx_hash if tx_hash.startswith("0x") else "0x" + tx_hash
 
 
 def peaq_credit_score(did):

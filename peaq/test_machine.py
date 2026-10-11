@@ -34,7 +34,8 @@ class FakeClient:
             FAIL_NEXT.pop()
             raise RuntimeError("rpc down")
         SUBMITTED.append(kw)
-        return ("0x" + f"{len(SUBMITTED):064x}", b"datahash")
+        # Like SDK 0.11.0 on mainnet: the hash comes back WITHOUT a 0x prefix.
+        return (f"{len(SUBMITTED):064x}", b"datahash")
 
 
 sdk = types.ModuleType("peaq_os_sdk")
@@ -115,6 +116,10 @@ check("raw_data carries all 7 Solana settlements",
       raw["sales"] == 7 and len(raw["settlements"]) == 7 and raw["chain"] == "solana")
 check("metadata is bytes under 4096", isinstance(kw["metadata"], bytes)
       and len(kw["metadata"]) <= 4096)
+
+check("returned tx hash carries the 0x prefix",
+      out["events"] and out["events"][0]["tx_hash"].startswith("0x")
+      and len(out["events"][0]["tx_hash"]) == 66)
 
 print("\nidempotency — the claim a judge will probe")
 out = machine.sync()

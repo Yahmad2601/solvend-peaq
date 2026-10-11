@@ -17,6 +17,7 @@ stated.
 | 4 | `--did-document`: `publicKeyMultibase` required by the CLI, "N/A for EVM" in docs | Docs / CLI mismatch |
 | 5 | `peaqos activate --tier` help shows `ENTRY`, but only `entry` is accepted | CLI bug |
 | 6 | `peaqos wallet create` silently uses `OWS_PASSPHRASE`; docs say it always prompts | Documentation |
+| 7 | Economics 2.0 machines silently pointed at the Tokenomics 1.0 EventRegistry | SDK / docs |
 
 ---
 
@@ -173,6 +174,40 @@ being asked. The behaviour is reasonable; the docs should match it.
 
 **Suggested fix.** Document that `wallet create` uses `OWS_PASSPHRASE` when set
 and prompts otherwise.
+
+---
+
+## 7. Economics 2.0 machines silently pointed at the Tokenomics 1.0 EventRegistry
+
+**What happens.** A machine activated through Economics 2.0 on `peaq-mainnet`
+(client built with `tokenomics20=Tokenomics20Config(deployment_id="peaq-mainnet")`)
+fails every `submit_event` with:
+
+```
+RpcError: Machine ID 8600820691859294852796023821329786994502637838982221572620760063908348418155 does not exist
+```
+
+**Cause.** The client constructor requires `event_registry`, and the Python SDK
+docs (and the `from_env` docstring) present it alongside the other Tokenomics
+1.0 addresses. Configured from the "Tokenomics 1.0" table, it points at
+`0x43c6…EcbA`, which has no record of Economics 2.0 machine IDs. Economics 2.0
+machines must use EventRegistry (2.0) `0xA1e7…5Ad1e`, which appears only on the
+contracts page and the submit-events guide.
+
+Three things make this hard to spot:
+
+- `Tokenomics20Config` resolves every other Economics 2.0 address from the SDK's
+  deployment snapshot, but the `peaq-mainnet` snapshot in SDK 0.11.0 contains
+  **no EventRegistry**, so a Tokenomics-mode client still submits to whatever
+  legacy address it was given.
+- The guide notes that "both contracts share the `submitEvent` selector, so the
+  SDK cannot catch a wrong address before sending".
+- The error reads "does not exist" rather than the documented `MachineNotFound`.
+
+**Suggested fix.** Add the 2.0 EventRegistry to the `peaq-mainnet` deployment
+snapshot and use it automatically in Tokenomics mode, or have `submit_event`
+check that the machine exists in the configured registry and name the
+expected address in the error.
 
 ---
 

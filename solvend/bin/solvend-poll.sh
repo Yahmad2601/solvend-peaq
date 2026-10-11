@@ -73,7 +73,10 @@ PEAQ_PY="${PEAQ_PYTHON:-/home/pi/solvend-peaq/.peaq/bin/python3}"
 if [ -n "${PEAQ_MACHINE_ID:-}" ] && [ -x "$PEAQ_PY" ]; then
     PEAQ_OUT=$("$PEAQ_PY" /opt/solvend/peaq/machine.py --sync 2>&1) \
       || logger -t solvend-peaq "sync exited non-zero"
+    # Quiet only when nothing was due. Any error (including a failed submission,
+    # which also reads "submitted": 0) is always logged.
     case "$PEAQ_OUT" in
+        *'"error'*) printf '%s\n' "$PEAQ_OUT" | logger -t solvend-peaq ;;
         *'"submitted": 0'*) ;;
         *) printf '%s\n' "$PEAQ_OUT" | logger -t solvend-peaq ;;
     esac

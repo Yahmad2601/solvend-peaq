@@ -54,9 +54,12 @@ import time
 from collections import defaultdict
 
 try:
-    # Hand runs pick up the repo-root .env. The poller sources /etc/solvend/env
-    # first, and override=False means the env file always wins.
+    # Manual runs read the same service configuration as the poller, so a hand
+    # run can never use different settings (e.g. a missing PEAQ_REPORT_FROM).
+    # Already-set variables always win (override=False), then the repo .env.
     from dotenv import load_dotenv
+    if os.access("/etc/solvend/env", os.R_OK):
+        load_dotenv("/etc/solvend/env", override=False)
     load_dotenv(override=False)
 except ImportError:
     pass

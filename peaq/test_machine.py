@@ -13,6 +13,9 @@ import types
 TMP = tempfile.mkdtemp()
 os.environ["SOLVEND_DB"] = os.path.join(TMP, "test.db")
 os.environ["PEAQ_MACHINE_ID"] = "8600820691859294852796023821329786994502637838982221572620760063908348418155"
+# Set before import so the machine's real /etc/solvend/env (read by machine.py)
+# cannot impose its cutoff on these fixed test timestamps.
+os.environ["PEAQ_REPORT_FROM"] = "0"
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "solvend"))

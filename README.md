@@ -20,7 +20,8 @@ its **Machine Credit Rating is built from real trade**, not simulated telemetry.
 | **First revenue event** | [$12.00 from 11 dispensed sales](https://peaq.subscan.io/tx/0xcffb1c93141bad7ee1e392415722a2cf5a42a616dd9f6c0936e6bf767facf917), submitted automatically |
 | **Sales to date** | 12 mainnet purchases (9–11 Oct 2026), made by the builder from a wallet separate from the merchant's, to run the complete production path end to end |
 | **Network** | peaq mainnet (chain 3338), `peaq-mainnet` Economics 2.0 deployment |
-| **Demo video** | _(link)_ |
+| **Order a drink** | Telegram [@Solvend2_bot](https://t.me/Solvend2_bot) (payment in USDC on Solana; the can is collected at the machine's keypad) |
+| **Demo video** | [SolVend × peaq: Demo](https://www.youtube.com/playlist?list=PLVl9kns_82WQ) |
 | **Evidence** | [`EVIDENCE.md`](EVIDENCE.md): every claim with a verifiable artifact |
 
 ---
@@ -69,7 +70,8 @@ the device.
 
 ### 2. Purchase
 
-1. **Order.** Any message to the shop bot returns one button per catalogue item.
+1. **Order.** Any message to the shop bot
+   ([@Solvend2_bot](https://t.me/Solvend2_bot)) returns one button per catalogue item.
    A tap creates an invoice priced from the catalogue, with a random 32-byte
    Solana Pay reference ([`solvend/shop_bot.py`](solvend/shop_bot.py)).
 2. **Pay.** The bot replies with **Pay with Phantom** and **Pay with Solflare**.
